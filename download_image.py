@@ -14,11 +14,11 @@ class DownloadError(Exception):
     pass
 
 
-class Downloader:
+class Downloader():
 
-    def __init__(self):
+    def __init__(self, os):
         self.folder_id = '1kB8PsWY0xRo7pLVHKXlcg4yVf6S0wlDj'
-        self.drive_service = connections.google_drive()
+        self.drive_service = connections.google_drive(os)
 
 
     def download_from_landsat(self, url):
@@ -91,8 +91,9 @@ class Downloader:
         while done is False:
             status, done = downloader.next_chunk()
             print("Download %d%%." % int(status.progress() * 100))
-
-        return fh
+        
+        print(fh)
+        return fh.getvalue()
 
 
 # download = Downloader()
