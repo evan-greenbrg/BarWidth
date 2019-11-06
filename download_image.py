@@ -1,6 +1,8 @@
 import requests
 import tempfile
 import io
+import os
+import shutil
 
 import googleapiclient
 
@@ -54,6 +56,15 @@ class Downloader():
         img_name = url.split('/')[-1]
         f = self.download_from_landsat(url)
         self.upload_to_gdrive(f, img_name) 
+
+    def save(self, url, root):
+        img_name = url.split('/')[-1]
+        path = root + img_name
+        f = self.download_from_landsat(url)
+        file_name = f.name
+        print(file_name)
+        shutil.copy(file_name, img_name)
+        os.remove(file_name)
 
     def get(self, filename):
         files_tot = []
