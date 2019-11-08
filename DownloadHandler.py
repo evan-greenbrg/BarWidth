@@ -16,7 +16,7 @@ class DownloadError(Exception):
     pass
 
 
-class Downloader():
+class DownloadHandler():
 
     def __init__(self, os):
         self.folder_id = '1kB8PsWY0xRo7pLVHKXlcg4yVf6S0wlDj'
@@ -63,7 +63,7 @@ class Downloader():
         f = self.download_from_landsat(url)
         file_name = f.name
         print(file_name)
-        shutil.copy(file_name, img_name)
+        shutil.copy(file_name, path)
         os.remove(file_name)
 
     def get(self, filename):
