@@ -1,6 +1,7 @@
 from osgeo import gdal
 import ogr
 import osr
+import rasterio
 import numpy as np
 
 
@@ -30,8 +31,8 @@ class RasterHandler():
         xmin, xres, xskew, ymax, yskew, yres = ds.GetGeoTransform()
         # calculate indices and index array
         indices = self.get_indices(
-            coordinates['lat'].to_numpy(),
-            coordinates['lon'].to_numpy(),
+            coordinates['easting'].to_numpy(),
+            coordinates['northing'].to_numpy(),
             xmin, 
             ymax, 
             xres, 
@@ -98,6 +99,120 @@ class RasterHandler():
         path_sp[-1] = name
 
         return '/'.join(path_sp)
+    
+    def get_pixel_size(self, raster_path):
+        raster =  rasterio.open(raster_path)
+        gt = raster.transform
+        pixelSizeX = gt[0]
+        pixelSizeY =-gt[4]
+
+        return pixelSizeX, pixelSizeY
+
+    def get_dem_pixels(self, east, north, xOrigin, yOrigin, 
+                    pixelWidth, pixelHeight):
+
+        dem_col = int((east - xOrigin) / pixelWidth)
+        dem_row = int((yOrigin - north ) / pixelHeight)
+
+        return dem_col, dem_row
+
+    def get_coords_by_step(self, easting, northing, dlon_inv, dlat_inv,
+                           xstep, ystep, i, sign=1):
+
+        dd = dlon_inv * xstep * i
+        east = easting + (dd * sign)
+
+        dd = dlat_inv * ystep * i
+        north = northing + (dd * sign)
+
+        return east, north
+
+    def get_xsection(self, row, dem, xOrigin, yOrigin, pixelWidth, 
+                     pixelHeight, xlength, xstep, ystep):
+
+        demcol, demrow = self.get_dem_pixels(
+            row['easting'], 
+            row['northing'], 
+            xOrigin, 
+            yOrigin, 
+            pixelWidth,
+            pixelHeight
+        )
+        types = [
+            ('position', 'i4'),
+            ('easting', 'U10'), 
+            ('northing', 'U10'),
+            ('demcol', 'i4'),
+            ('demrow', 'i4'),
+            ('demvalue', 'f4'),
+        ]
+        xsection = np.array(
+            tuple([
+                0,
+                row['easting'],
+                row['northing'], 
+                demcol, 
+                demrow, 
+                row['elev_0'],
+            ]),
+            dtype=types
+        )
+        for i in range(1, xlength + 1):
+            eastd, northd = self.get_coords_by_step(
+                row['easting'],
+                row['northing'],
+                row['dlon_inv'],
+                row['dlat_inv'],
+                xstep,
+                ystep,
+                i,
+                sign=1
+            )
+            eastu, northu = self.get_coords_by_step(
+                row['easting'],
+                row['northing'],
+                row['dlon_inv'],
+                row['dlat_inv'],
+                xstep,
+                ystep,
+                i,
+                sign=-1
+            )
+
+            demcol_d, demrow_d = self.get_dem_pixels(
+                eastd, 
+                northd, 
+                xOrigin, 
+                yOrigin, 
+                pixelWidth,
+                pixelHeight
+            )
+            demcol_u, demrow_u = self.get_dem_pixels(
+                eastu, 
+                northu, 
+                xOrigin, 
+                yOrigin, 
+                pixelWidth,
+                pixelHeight
+            )
+            value_d = dem[demrow_d][demcol_d]
+            value_u = dem[demrow_u][demcol_u]
+
+            d_pos = i
+            u_pos = i * -1
+            dlist = np.array(
+                tuple([d_pos, eastd, northd, demcol_d, demrow_d, value_d]),
+                dtype=xsection.dtype
+            )
+            ulist = np.array(
+                tuple([u_pos, eastu, northu, demcol_u, demrow_u, value_u]),
+                dtype=xsection.dtype
+            )
+
+            xsection = np.insert(xsection, 0, dlist)
+            xsection = np.append(xsection, ulist)
+
+        return xsection
 
 
 def main(B3input, B6input, DEM_name, demEPSG, landsatEPSG):
