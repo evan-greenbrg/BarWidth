@@ -9,9 +9,6 @@ import googleapiclient
 import connections
 
 
-TEST_PATH = 'http://landsat-pds.s3.amazonaws.com/c1/L8/052/122/LC08_L1GT_052122_20191103_20191103_01_RT/LC08_L1GT_052122_20191103_20191103_01_RT_B1.TIF'
-TEST_FILENAME = 'LC08_L1GT_052122_20191103_20191103_01_RT_B1.TIF' 
-
 class DownloadError(Exception):
     pass
 
@@ -107,6 +104,20 @@ class DownloadHandler():
         return fh.getvalue()
 
 
-# download = Downloader()
-# download.put(TEST_PATH)
-# fh = download.get(TEST_FILENAME)
+def main(paths, root, os='mac'):
+    dl = DownloadHandler(os)
+    for path in paths:
+        dl.put(path)
+
+    for path in paths:
+        dl.save(path, root)
+
+
+if __name__ == "__main__":
+    paths = [
+        'http://landsat-pds.s3.amazonaws.com/c1/L8/025/039/LC08_L1TP_025039_20190514_20190521_01_T1/LC08_L1TP_025039_20190514_20190521_01_T1_B3.TIF',
+        'http://landsat-pds.s3.amazonaws.com/c1/L8/025/039/LC08_L1TP_025039_20190514_20190521_01_T1/LC08_L1TP_025039_20190514_20190521_01_T1_B6.TIF'
+    ]
+    root = '~/Phd Documents/Projects/river-profiles/Landsat/'
+
+    main(paths, root)
