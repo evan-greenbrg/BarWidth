@@ -119,10 +119,10 @@ class RasterHandler():
     def get_coords_by_step(self, easting, northing, dlon_inv, dlat_inv,
                            xstep, ystep, i, sign=1):
 
-        dd = dlon_inv * xstep * i
+        dd = dlat_inv * xstep * i
         east = easting + (dd * sign)
 
-        dd = dlat_inv * ystep * i
+        dd = dlon_inv * ystep * i
         north = northing + (dd * sign)
 
         return east, north
@@ -195,8 +195,16 @@ class RasterHandler():
                 pixelWidth,
                 pixelHeight
             )
-            value_d = dem[demrow_d][demcol_d]
-            value_u = dem[demrow_u][demcol_u]
+            try:
+                value_d = dem[demrow_d][demcol_d]
+            except IndexError:
+                print('Index out of bounds for axis')
+                value_d = None
+            try:
+                value_u = dem[demrow_u][demcol_u]
+            except IndexError:
+                print('Index out of bounds for axis')
+                value_u = None
 
             d_pos = i
             u_pos = i * -1

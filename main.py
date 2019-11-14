@@ -22,23 +22,32 @@ DEMpath = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/DEM/output
 def main(b3path, b6path, DEMpath): 
 
     # Load the File
+    print('Loading the files')
     B3 = cv2.imread(b3path, cv2.IMREAD_UNCHANGED)
     B6 = cv2.imread(b6path, cv2.IMREAD_UNCHANGED)
 
     riv = RiverHandler()
     # Find Biggest Centerline in Image
+    print('Finding the Centerline')
     centerline = riv.get_centerline(B3, B6)
 
-    
     gmLandsat = georef.loadGeoMetadata(b3path)
     # Get Lat, Lon Coordinates from Image
+    print('Finding coordiantes along centerline')
     coordinates = riv.get_river_coordinates(centerline, gmLandsat)
+    coordinates = coordinates.reset_index(drop=True)
+
+    # Smooth the river centerline
+    coordinates['lon'], coordinates['lat'] = riv.knn_smoothing(
+        coordinates, n=10
+    )
 
     rh = RasterHandler()
     # Convert between landsat and dem projections and lat, lon to utm
     lansatEPSG = 4326
     demEPSG = 4269
     prj_str = '+proj=utm +zone=15U, +north +ellps=GRS80 +datum=NAD83 +units=m +no_defs'
+    print('Converting coordinates to projection')
     myProj = Proj(prj_str)       
     coord_transform = pandas.DataFrame(
         columns=['lat', 'lon', 'easting', 'northing']
@@ -61,6 +70,7 @@ def main(b3path, b6path, DEMpath):
 
     coordinates = coord_transform.reset_index(drop=True)
 
+    print('Loading DEM Data')
     # Load in DEM and find meta data
     ds = gdal.Open(DEMpath, 0)
     dem = ds.ReadAsArray()
@@ -77,8 +87,9 @@ def main(b3path, b6path, DEMpath):
     values = rh.values_from_coordinates(ds, dem, coordinates)
     coordinates['elev_0'] = values
 
+    print('Finding channel and cross-section directions')
     # Find the channel direction and inverse channel direction
-    coordinates = riv.get_direction(coordinates)
+    coordinates = riv.get_direction(coordinates, smooth=5)
     coordinates = riv.get_inverse_direction(coordinates)
 
     # Start building river dem
@@ -87,6 +98,7 @@ def main(b3path, b6path, DEMpath):
         x, y = georef.lonlat2pix(gmDEM, row['lon'], row['lat'])
         river_dem[y, x] = row['elev_0']
 
+    print('Building channel cross sections')
     # Build Cross-Section Structure
     types = [
         ('coords', 'object'), 
@@ -103,7 +115,7 @@ def main(b3path, b6path, DEMpath):
             yOrigin, 
             pixelWidth, 
             pixelHeight,
-            200,
+            300,
             xstep,
             ystep
         )
@@ -122,16 +134,41 @@ def main(b3path, b6path, DEMpath):
             dtype=xsections.dtype
         )
         xsections = np.append(xsections, section)
+   
+    # Smooth Cross sections if Smoothing is set
+    if smoothing:
+        print('Smoothing Cross-Sections')
+        for idx, section in np.ndenumerate(xsections):
+            b = riv.xsection_smoothing(idx, section['xsection'], smoothing)
+            xsections[idx[0]]['xsection'] = b
+
+
+fig = plt.figure()
+ax1 = plt.plot(df_sm['position'], df_sm['demvalue'])
+plt.plot(x, y, linestyle='dashed')
+plt.show()
+
+np.save('xsections_test', xsections)
+
+
+#################################################
+####         MISC                            ####
+#################################################
+# To CSV
+index = 0 
+root = '~/PhD Documents/Projects/river-profiles/'
+fn = 'test_xsection_sm6.csv'
+test_array = xsections[index]['xsection']
+df = pandas.DataFrame(df_x)
+df.to_csv((root + fn))
 
 
 #################################################
 ####         NEXT STEPS                      ####
 #################################################
-# 1. Find the northing easting magnitude for each pixel on DEM
-# 2. Find coordinates at each pixel step moving in inv direction from channel
-#    going in both directions at some fixed diistance -> cross section
-# 3. Automatic calculation of channel widths (find distance between maxima?)
-# 4. Automatic detection of point bars. Area of maximum curvature? (will be hard)
+# 1. Convert the "position" field to a true distance
+# 2. Automatic calculation of channel widths (find distance between maxima?)
+# 3. Automatic detection of point bars. Area of maximum curvature? (will be hard)
 # 4. Automatic calculation of clinoform surfaces (This will be the hard part)
 #    Need to make sure that you are not hard coding the answer
 #    Will it work if clinoform width is distance between inner channel bank 
