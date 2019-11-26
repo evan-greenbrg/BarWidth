@@ -1,9 +1,16 @@
+import json
 from osgeo import gdal
 import ogr
 import osr
 import rasterio
 import numpy as np
-
+from rasterio.plot import show
+from rasterio.plot import show_hist
+from rasterio.mask import mask
+from shapely.geometry import box
+import geopandas as gpd
+from fiona.crs import from_epsg
+import pycrs
 
 class RasterHandler():
 
@@ -28,6 +35,9 @@ class RasterHandler():
         return i, j
 
     def values_from_coordinates(self, ds, dem, coordinates):
+        """
+        Finds DEM values from set of coordinates
+        """
         xmin, xres, xskew, ymax, yskew, yres = ds.GetGeoTransform()
         # calculate indices and index array
         indices = self.get_indices(
@@ -82,6 +92,8 @@ class RasterHandler():
         """
         Clips raster file based on bounding box coordinates
         """
+        xs = [minx, maxx]
+        ys = [miny, maxy]
         ds = gdal.Open(ipath)
         ds = gdal.Translate(
             opath, 
@@ -118,14 +130,24 @@ class RasterHandler():
 
     def get_coords_by_step(self, easting, northing, dlon_inv, dlat_inv,
                            xstep, ystep, i, sign=1):
+        """
+        For a given centerline point, takes the channel direction at that 
+        point and multiples it by the step to find the next cross-sectional
+        point
+        """
 
-        dd = dlat_inv * xstep * i
-        east = easting + (dd * sign)
+        # Find the next Easting
+        dd_east = dlat_inv * xstep * i
+        east = easting + (dd_east * sign)
 
-        dd = dlon_inv * ystep * i
-        north = northing + (dd * sign)
+        # Find the next Northing
+        dd_north = dlon_inv * ystep * i
+        north = northing + (dd_north * sign)
 
-        return east, north
+        # Find the distance between the origin and the new point
+        distance = ((dd_east**2) + (dd_north**2))**(1/2) * sign
+
+        return east, north, distance
 
     def get_xsection(self, row, dem, xOrigin, yOrigin, pixelWidth, 
                      pixelHeight, xlength, xstep, ystep):
@@ -139,7 +161,7 @@ class RasterHandler():
             pixelHeight
         )
         types = [
-            ('position', 'i4'),
+            ('distance', 'f4'),
             ('easting', 'U10'), 
             ('northing', 'U10'),
             ('demcol', 'i4'),
@@ -158,7 +180,7 @@ class RasterHandler():
             dtype=types
         )
         for i in range(1, xlength + 1):
-            eastd, northd = self.get_coords_by_step(
+            eastd, northd, distanced = self.get_coords_by_step(
                 row['easting'],
                 row['northing'],
                 row['dlon_inv'],
@@ -168,7 +190,7 @@ class RasterHandler():
                 i,
                 sign=1
             )
-            eastu, northu = self.get_coords_by_step(
+            eastu, northu, distanceu = self.get_coords_by_step(
                 row['easting'],
                 row['northing'],
                 row['dlon_inv'],
@@ -206,8 +228,8 @@ class RasterHandler():
                 print('Index out of bounds for axis')
                 value_u = None
 
-            d_pos = i
-            u_pos = i * -1
+            d_pos = distanced 
+            u_pos = distanceu
             dlist = np.array(
                 tuple([d_pos, eastd, northd, demcol_d, demrow_d, value_d]),
                 dtype=xsection.dtype
@@ -224,21 +246,81 @@ class RasterHandler():
 
 
 def main(B3input, B6input, DEM_name, demEPSG, landsatEPSG):
-    rh = RasterHandler()
-    ds = gdal.Open(DEM_name)
 
-    minx, miny, maxx, maxy = rh.bounding_coordinates(ds)
+    rh = RasterHandler()
+    B3input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B3.tiff'
+    B6input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B6.tiff'
+    DEM_name = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/koyukuk_dem_5_clip_2.tif'
+    B3out_path = rh.rename_path(B3input)
+
+    DEMdata = rasterio.open(DEM_name)
+    landsatB3Data =rasterio.open(B3input)
+    landsatB6Data =rasterio.open(B3input)
+
+    dsdem = gdal.Open(DEM_name)
+    dslandsat = gdal.Open(B3input)
+
+    dem_srs = osr.SpatialReference(wkt=dsdem.GetProjection())
+    demEPSG = int(dem_srs.GetAttrValue('AUTHORITY', 1))
+    landsat_srs = osr.SpatialReference(wkt=dslandsat.GetProjection())
+    landsatEPSG = int(landsat_srs.GetAttrValue('AUTHORITY', 1))
+
+    minx0, miny0, maxx0, maxy0 = rh.bounding_coordinates(dsdem)
+    bbox = box(minx0, miny0, maxx0, maxy0)
+    geo = gpd.GeoDataFrame(
+        {'geometry': bbox}, 
+        index=[0], 
+        crs=from_epsg(demEPSG)
+    )
+    geo = geo.to_crs(crs=landsatEPSG)
+    coords = [json.loads(geo.to_json())['features'][0]['geometry']]
+
+    out_img, out_transform = mask(
+        dataset=landsatB3Data, 
+        shapes=coords, 
+        crop=True
+    )
+    out_meta = landsatB3Data.meta.copy()
+    epsg_code = int(landsatB3Data.crs.data['init'][5:])
+
+    out_meta.update(
+        {
+            "driver": "GTiff",
+            "height": out_img.shape[1],
+            "width": out_img.shape[2],
+            "transform": out_transform,
+            "crs": pycrs.parse.from_epsg_code(epsg_code).to_proj4()
+        }
+    )
+    with rasterio.open(B3out_path, "w", **out_meta) as dest:
+       dest.write(out_img)
+
+    clipped = rasterio.open(B3out_path)
+    show((clipped, 1), cmap='terrain')
+    show((landsatB3Data, 1), cmap='terrain')
+    show((DEMdata, 1), cmap='terrain')
+
+    ds = gdal.Open(B3out_path, 0)
+    B3 = ds.ReadAsArray()
+    B3_mask = np.ma.masked_where(B3 <= 0, B3)
+    img = plt.imshow(B3)
+    im2 = plt.imshow(B3_mask)
+    plt.show()
+
+
+
+
     minx, miny = rh.transform_coordinates(
-        minx,
-        miny,
+        minx0,
+        maxy0,
         demEPSG,
-        landsatEPSG
+        landsatEPSG,
     )
     maxx, maxy = rh.transform_coordinates(
-        maxx,
-        maxy,
+        maxx0,
+        miny0,
         demEPSG,
-        landsatEPSG
+        landsatEPSG,
     )
 
     B3out_path = rh.rename_path(B3input)
@@ -248,11 +330,8 @@ def main(B3input, B6input, DEM_name, demEPSG, landsatEPSG):
 
 
 if __name__ == "__main__":
-    B3input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_025039_20190514_20190521_01_T1_B3.TIF'
-    B6input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_025039_20190514_20190521_01_T1_B6.TIF'
-    DEM_name = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/DEM/output_be.tif'
+    B3input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B3.tiff'
+    B6input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B6.tiff'
+    DEM_name = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/koyukuk_dem_5_clip_2.tif'
 
-    inEPSG = 4269
-    outEPSG = 4326
-
-    main(B3input, B6input, DEM_name, inEPSG, outEPSG)
+    main(B3input, B6input, DEM_name, demEPSG, landsatEPSG)
