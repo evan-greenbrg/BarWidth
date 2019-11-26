@@ -88,19 +88,54 @@ class RasterHandler():
 
         return point.GetX(), point.GetY()
 
-    def clip_raster(self, ipath, opath, minx, maxy, maxx, miny):
+    def clip_raster(self, ipath, dem_path):
         """
         Clips raster file based on bounding box coordinates
         """
-        xs = [minx, maxx]
-        ys = [miny, maxy]
-        ds = gdal.Open(ipath)
-        ds = gdal.Translate(
-            opath, 
-            ds, 
-            projWin = [minx, maxy, maxx, miny]
+        opath = self.rename_path(ipath)
+        dem_data = rasterio.open(dem_path)
+        data = rasterio.open(ipath)
+
+        dsdem = gdal.Open(DEM_name)
+        dslandsat = gdal.Open(B3input)
+
+        dem_srs = osr.SpatialReference(wkt=dsdem.GetProjection())
+        demEPSG = int(dem_srs.GetAttrValue('AUTHORITY', 1))
+
+        data_srs = osr.SpatialReference(wkt=dslandsat.GetProjection())
+        dataEPSG = int(data_srs.GetAttrValue('AUTHORITY', 1))
+
+        minx0, miny0, maxx0, maxy0 = self.bounding_coordinates(dsdem)
+        bbox = box(minx0, miny0, maxx0, maxy0)
+        geo = gpd.GeoDataFrame(
+            {'geometry': bbox}, 
+            index=[0], 
+            crs=from_epsg(demEPSG)
         )
-        ds = None
+        geo = geo.to_crs(crs=dataEPSG)
+        coords = [json.loads(geo.to_json())['features'][0]['geometry']]
+
+        out_img, out_transform = mask(
+            dataset=data, 
+            shapes=coords, 
+            crop=True
+        )
+
+        out_meta = data.meta.copy()
+        epsg_code = int(data.crs.data['init'][5:])
+
+        out_meta.update(
+            {
+                "driver": "GTiff",
+                "height": out_img.shape[1],
+                "width": out_img.shape[2],
+                "transform": out_transform,
+                "crs": pycrs.parse.from_epsg_code(epsg_code).to_proj4()
+            }
+        )
+
+        with rasterio.open(opath, "w", **out_meta) as dest:
+           dest.write(out_img)
 
     def rename_path(self, input_path):
         path_sp = input_path.split('/')
@@ -248,85 +283,12 @@ class RasterHandler():
 def main(B3input, B6input, DEM_name, demEPSG, landsatEPSG):
 
     rh = RasterHandler()
-    B3input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B3.tiff'
-    B6input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B6.tiff'
-    DEM_name = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/koyukuk_dem_5_clip_2.tif'
-    B3out_path = rh.rename_path(B3input)
+    rh.clip_raster(B3input, DEM_name)
+    rh.clip_raster(B6input, DEM_name)
 
     DEMdata = rasterio.open(DEM_name)
     landsatB3Data =rasterio.open(B3input)
-    landsatB6Data =rasterio.open(B3input)
-
-    dsdem = gdal.Open(DEM_name)
-    dslandsat = gdal.Open(B3input)
-
-    dem_srs = osr.SpatialReference(wkt=dsdem.GetProjection())
-    demEPSG = int(dem_srs.GetAttrValue('AUTHORITY', 1))
-    landsat_srs = osr.SpatialReference(wkt=dslandsat.GetProjection())
-    landsatEPSG = int(landsat_srs.GetAttrValue('AUTHORITY', 1))
-
-    minx0, miny0, maxx0, maxy0 = rh.bounding_coordinates(dsdem)
-    bbox = box(minx0, miny0, maxx0, maxy0)
-    geo = gpd.GeoDataFrame(
-        {'geometry': bbox}, 
-        index=[0], 
-        crs=from_epsg(demEPSG)
-    )
-    geo = geo.to_crs(crs=landsatEPSG)
-    coords = [json.loads(geo.to_json())['features'][0]['geometry']]
-
-    out_img, out_transform = mask(
-        dataset=landsatB3Data, 
-        shapes=coords, 
-        crop=True
-    )
-    out_meta = landsatB3Data.meta.copy()
-    epsg_code = int(landsatB3Data.crs.data['init'][5:])
-
-    out_meta.update(
-        {
-            "driver": "GTiff",
-            "height": out_img.shape[1],
-            "width": out_img.shape[2],
-            "transform": out_transform,
-            "crs": pycrs.parse.from_epsg_code(epsg_code).to_proj4()
-        }
-    )
-    with rasterio.open(B3out_path, "w", **out_meta) as dest:
-       dest.write(out_img)
-
-    clipped = rasterio.open(B3out_path)
-    show((clipped, 1), cmap='terrain')
-    show((landsatB3Data, 1), cmap='terrain')
-    show((DEMdata, 1), cmap='terrain')
-
-    ds = gdal.Open(B3out_path, 0)
-    B3 = ds.ReadAsArray()
-    B3_mask = np.ma.masked_where(B3 <= 0, B3)
-    img = plt.imshow(B3)
-    im2 = plt.imshow(B3_mask)
-    plt.show()
-
-
-
-
-    minx, miny = rh.transform_coordinates(
-        minx0,
-        maxy0,
-        demEPSG,
-        landsatEPSG,
-    )
-    maxx, maxy = rh.transform_coordinates(
-        maxx0,
-        miny0,
-        demEPSG,
-        landsatEPSG,
-    )
-
-    B3out_path = rh.rename_path(B3input)
-    rh.clip_raster(B3input, B3out_path, minx, maxy, maxx, miny)
-    B6out_path = rh.rename_path(B6input)
-    rh.clip_raster(B6input, B6out_path, minx, maxy, maxx, miny)
+    landsatB6Data =rasterio.open(B6input)
 
 
 if __name__ == "__main__":

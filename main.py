@@ -21,7 +21,8 @@ LANSATEPSG = 32604
 # DEMEPSG = 4269 # Trinity
 DEMEPSG = 3413# Koyukuk 
  
-PRJ_STR = '+proj=utm +zone=15U, +north +ellps=GRS80 +datum=NAD83 +units=m +no_defs'
+# PRJ_STR = '+proj=utm +zone=15U, +north +ellps=GRS80 +datum=NAD83 +units=m +no_defs' # Trinity
+PRJ_STR = '+proj=utm +zone=4U, +north +ellps=GRS80 +datum=NAD83 +units=m +no_defs' # KOYKUK
 WIDTH_ORDER = 35
 section_len = 300
 section_smoothing = 35
