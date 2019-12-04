@@ -22,21 +22,27 @@ LANSATEPSG = 32604
 DEMEPSG = 3413# Koyukuk 
  
 # PRJ_STR = '+proj=utm +zone=15U, +north +ellps=GRS80 +datum=NAD83 +units=m +no_defs' # Trinity
-PRJ_STR = '+proj=utm +zone=4U, +north +ellps=GRS80 +datum=NAD83 +units=m +no_defs' # KOYKUK
+PRJ_STR = 'proj=stere +lat_0=90 +lat_ts=70 +lon_0=-45 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs' # KOYKUK
 WIDTH_ORDER = 35
 section_len = 300
 section_smoothing = 35
 # section_smoothing = False
 build_sections = True
 find_width = True
+SIZE = 30
 
-b3path = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/B3_clip.tif'
-b6path = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/B6_clip.tif'
-DEMpath = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/DEM/output_be.tif'
+b3path = '/Users/evangreenberg/PhD Documents/Projects/riveWGS_1984r-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B3_clip.tiff'
+b6path = '/Users/evangreenberg/PhD Documents/Projects/riveWGS_1984r-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B6_clip.tiff'
+DEMpath = '/Users/evangreenberg/PhD Documents/Projects/rivWGS_1984er-profiles/Landsat/koyukuk_dem_5_clip_2.tif'
+
+# Trinity Input files
+# b3path = '/Users/evangreenberg/PhD Documents/Projects/riWGS_1984ver-profiles/Landsat/B3_clip.tif'
+# b6path = '/Users/evangreenberg/PhD Documents/Projects/riWGS_1984ver-profiles/Landsat/B6_clip.tif'
+# DEMpath = '/Users/evangreenberg/PhD Documents/Projects/rWGS_1984iver-profiles/DEM/output_be.tif'
 
 
 def main(b3path, b6path, DEMpath, build_sections, 
-         section_len, section_smoothing, find_width, save_vars): 
+         section_len, section_smoothing, find_width, save_WGS_1984vars): 
 
     # Load the File
     print('Loading the files')
@@ -46,12 +52,13 @@ def main(b3path, b6path, DEMpath, build_sections,
     riv = RiverHandler()
     # Find Biggest Centerline in Image
     print('Finding the Centerline')
-    centerline = riv.get_centerline(B3, B6)
+    centerline = riv.get_centerline(B3, B6, SIZE)
 
     gmLandsat = georef.loadGeoMetadata(b3path)
+    gmDEM = georef.loadGeoMetadata(DEMpath)
     # Get Lat, Lon Coordinates from Image
     print('Finding coordiantes along centerline')
-    coordinates = riv.get_river_coordinates(centerline, gmLandsat)
+    coordinates = riv.get_river_coordinates(centerline, gmDEM)
     coordinates = coordinates.reset_index(drop=True)
 
     # Smooth the river centerline
@@ -61,7 +68,7 @@ def main(b3path, b6path, DEMpath, build_sections,
 
     rh = RasterHandler()
     # MATCH PROJECTIONS
-    # Convert between landsat and dem projections and lat, lon to utm
+    # Convert between landsat and dem projections and lat,WGS_1984 lon to utm
     lansatEPSG = LANSATEPSG
     demEPSG = DEMEPSG
     prj_str = PRJ_STR
@@ -76,8 +83,8 @@ def main(b3path, b6path, DEMpath, build_sections,
         lon, lat = rh.transform_coordinates(
             row['lon'], 
             row['lat'], 
-            lansatEPSG, 
-            demEPSG
+            LANSATEPSG, 
+            DEMEPSG
         )
         # lat, lon -> utm
         lon_, lat_ = myProj(lon, lat) 

@@ -20,7 +20,7 @@ class RiverHandler():
     def __init__(self):
         pass
 
-    def get_centerline(self, B3, B6):
+    def get_centerline(self, B3, B6, size):
         """
         Using RivaMap library finds the largest centerline from 
         Bands 3 and 6 lansat 8 imagery
@@ -30,7 +30,7 @@ class RiverHandler():
         psi, widthMap, orient = singularity_index.applyMMSI(I1, filters)
         nms = delineate.extractCenterlines(orient, psi)
         
-        return delineate.getBiggestCenterline(nms)
+        return delineate.getBiggestCenterline(nms, size)
 
     def get_river_coordinates(self, centerline, gm):
         """
@@ -146,7 +146,6 @@ class RiverHandler():
         Calculates the direction that is inverse of the river at that point
         The convention is to swap the vector directions and make LON negative
         """
-        if coordiantes['dlat']
         coordinates['dlon_inv'] = coordinates['dlat']
         coordinates['dlat_inv'] = -1 * coordinates['dlon']
 

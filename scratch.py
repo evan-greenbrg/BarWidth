@@ -317,3 +317,37 @@ for key in bars_.keys():
     plt.scatter(bars_[key]['idx'], bars_[key]['ratio'])
 plt.plot(line_pl, line_val)
 plt.show()
+
+#####
+mp = 0
+for row in centerline:
+    m = max(row)
+    if m > mp:
+        mp = m
+
+ml = 0
+mi = 0
+for i in range(1,mp):
+    l = len(centerline[centerline==i])
+    if l > ml:
+        ml = l 
+        mi = i
+
+centerline2 = np.where(centerline not in idxs, 0, centerline)
+plt.imshow(centerline)
+plt.show()
+
+#XXX
+# Add in the dilineate algo to sort the centerlines by length
+centerlines3 = np.hstack((0, sumstrong > 0)).astype('bool')
+centerlines3 = centerlines3[cclabels]
+
+np.sort(data,axis=0)
+np.sort(lengths, axis=0)
+data[np.argsort(data.A[:, 1])])
+
+ind=np.argsort(data[:,1],axis=0)
+data[ind.ravel(),:] 
+
+ind = np.argsort(-lengths[:, 1], axis=0)
+sort_len = lengths[ind.ravel(), :]

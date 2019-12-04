@@ -73,15 +73,25 @@ class RasterHandler():
         point.AddPoint(pointX, pointY)
         # create coordinate transformation
         inSpatialRef = osr.SpatialReference()
-        inSpatialRef.ImportFromEPSG(iEPSG)
+        srs = inSpatialRef.ImportFromEPSG(iEPSG)
+        if srs != 0:
+            raise RuntimeError(repr(res) + ': could not import from EPSG')
 
         outSpatialRef = osr.SpatialReference()
-        outSpatialRef.ImportFromEPSG(oEPSG)
+        srs = outSpatialRef.ImportFromEPSG(oEPSG)
+        if srs != 0:
+            raise RuntimeError(repr(res) + ': could not import from EPSG')
 
         coordTransform = osr.CoordinateTransformation(
             inSpatialRef, 
             outSpatialRef
         )
+
+        ct = osr.CoordinateTransformation(
+            inSpatialRef, 
+            outSpatialRef
+        )
+        longitude, latitude, z = ct.TransformPoint(pointX, pointY)
 
         # transform point
         point.Transform(coordTransform)
@@ -287,13 +297,13 @@ def main(B3input, B6input, DEM_name, demEPSG, landsatEPSG):
     rh.clip_raster(B6input, DEM_name)
 
     DEMdata = rasterio.open(DEM_name)
-    landsatB3Data =rasterio.open(B3input)
-    landsatB6Data =rasterio.open(B6input)
+    landsatB3Data = rasterio.open(B3input)
+    landsatB6Data = rasterio.open(B6input)
 
 
 if __name__ == "__main__":
-    B3input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B3.tiff'
-    B6input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B6.tiff'
+    B3input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B3_clip.tiff'
+    B6input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B6_clip.tiff'
     DEM_name = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/koyukuk_dem_5_clip_2.tif'
 
     main(B3input, B6input, DEM_name, demEPSG, landsatEPSG)
