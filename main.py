@@ -1,238 +1,300 @@
-import math
-import cv2
+import argparse
+import json
+
 import gdal
 import numpy as np
 import pandas
 from pyproj import Proj
-from rivamap import preprocess, singularity_index, delineate, georef, visualization
-import rasterio
-from rasterio.plot import show
-from scipy.signal import argrelextrema
-from scipy.ndimage import label as ndlabel
-from scipy.ndimage import sum as ndsum
 
+from BarHandler import BarHandler
 from RasterHandler import RasterHandler
 from RiverHandler import RiverHandler
+from Visualizer import Visualizer
 
 
-CENTERLINE_SMOOTHING = 10
-# LANSATEPSG = 4326 # Trinity
-LANSATEPSG = 32604
-# DEMEPSG = 4269 # Trinity
-DEMEPSG = 3413# Koyukuk 
- 
-# PRJ_STR = '+proj=utm +zone=15U, +north +ellps=GRS80 +datum=NAD83 +units=m +no_defs' # Trinity
-PRJ_STR = 'proj=stere +lat_0=90 +lat_ts=70 +lon_0=-45 +k=1 +x_0=0 +y_0=0 +ellps=WGS84 +datum=WGS84 +units=m +no_defs' # KOYKUK
-WIDTH_ORDER = 35
-section_len = 300
-section_smoothing = 35
-# section_smoothing = False
-build_sections = True
-find_width = True
-SIZE = 30
+def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
+         SectionLength, SectionSmoothing, WidthSens, OutputRoot):
 
-b3path = '/Users/evangreenberg/PhD Documents/Projects/riveWGS_1984r-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B3_clip.tiff'
-b6path = '/Users/evangreenberg/PhD Documents/Projects/riveWGS_1984r-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B6_clip.tiff'
-DEMpath = '/Users/evangreenberg/PhD Documents/Projects/rivWGS_1984er-profiles/Landsat/koyukuk_dem_5_clip_2.tif'
-
-# Trinity Input files
-# b3path = '/Users/evangreenberg/PhD Documents/Projects/riWGS_1984ver-profiles/Landsat/B3_clip.tif'
-# b6path = '/Users/evangreenberg/PhD Documents/Projects/riWGS_1984ver-profiles/Landsat/B6_clip.tif'
-# DEMpath = '/Users/evangreenberg/PhD Documents/Projects/rWGS_1984iver-profiles/DEM/output_be.tif'
-
-
-def main(b3path, b6path, DEMpath, build_sections, 
-         section_len, section_smoothing, find_width, save_WGS_1984vars): 
-
-    # Load the File
-    print('Loading the files')
-    B3 = cv2.imread(b3path, cv2.IMREAD_UNCHANGED)
-    B6 = cv2.imread(b6path, cv2.IMREAD_UNCHANGED)
-
+    # Initialize classes, objects
     riv = RiverHandler()
-    # Find Biggest Centerline in Image
-    print('Finding the Centerline')
-    centerline = riv.get_centerline(B3, B6, SIZE)
+    rh = RasterHandler()
+    ds = gdal.Open(DEMpath, 0)
+    print(ds)
 
-    gmLandsat = georef.loadGeoMetadata(b3path)
-    gmDEM = georef.loadGeoMetadata(DEMpath)
-    # Get Lat, Lon Coordinates from Image
-    print('Finding coordiantes along centerline')
-    coordinates = riv.get_river_coordinates(centerline, gmDEM)
-    coordinates = coordinates.reset_index(drop=True)
+    # Load the Centerline Coordinates File
+    print('Loading the Centerline File')
+    coordinates = pandas.read_csv(
+        CenterlinePath,
+        names=['Longitude', 'Latitude'],
+        header=1,
+        index_col=[0]
+    )
 
     # Smooth the river centerline
-    coordinates['lon'], coordinates['lat'] = riv.knn_smoothing(
-        coordinates, n=CENTERLINE_SMOOTHING
+    print('Smoothing the river centerline')
+    coordinates['Longitude'], coordinates['Latitude'] = riv.knn_smoothing(
+        coordinates, n=CenterlineSmoothing
     )
 
-    rh = RasterHandler()
     # MATCH PROJECTIONS
     # Convert between landsat and dem projections and lat,WGS_1984 lon to utm
-    lansatEPSG = LANSATEPSG
-    demEPSG = DEMEPSG
-    prj_str = PRJ_STR
-
     print('Converting coordinates to projection')
-    myProj = Proj(prj_str)       
+    myProj = Proj(ProjStr)
     coord_transform = pandas.DataFrame(
-        columns=['lat', 'lon', 'easting', 'northing']
+        columns=['lon', 'lat', 'easting', 'northing']
     )
     for idx, row in coordinates.iterrows():
-        # landsat -> dem projection
-        lon, lat = rh.transform_coordinates(
-            row['lon'], 
-            row['lat'], 
-            LANSATEPSG, 
-            DEMEPSG
-        )
         # lat, lon -> utm
-        lon_, lat_ = myProj(lon, lat) 
+        east, north = myProj(row['Latitude'], row['Longitude'])
         df = pandas.DataFrame(
-            data=[[lon, lat, lon_, lat_]],
+            data=[[row['Longitude'], row['Latitude'], east, north]],
             columns=['lat', 'lon', 'easting', 'northing']
         )
         coord_transform = coord_transform.append(df)
 
     coordinates = coord_transform.reset_index(drop=True)
 
-    print('Loading DEM Data')
-    # LOAD IN DEM DATA AND META DATA 
-    ds = gdal.Open(DEMpath, 0)
+    print('Loading DEM Data and MetaData')
+    # Loading DEM data and metadata
     dem = ds.ReadAsArray()
-    dem_clean = np.where(dem < 0, False, dem)
+
     transform = ds.GetGeoTransform()
     xOrigin = transform[0]
     yOrigin = transform[3]
     pixelWidth = transform[1]
     pixelHeight = -transform[5]
-    gmDEM = georef.loadGeoMetadata(DEMpath)
     xstep, ystep = rh.get_pixel_size(DEMpath)
 
-    if build_sections:
-        # Get values at each coordinate location
-        values = rh.values_from_coordinates(ds, dem, coordinates)
-        coordinates['elev_0'] = values
+    # Get values at each coordinate location
+    values = rh.values_from_coordinates(ds, dem, coordinates)
+    coordinates['elev_0'] = values
 
-        print('Finding channel and cross-section directions')
-        # Find the channel direction and inverse channel direction
-        coordinates = riv.get_direction(coordinates)
-        coordinates = riv.get_inverse_direction(coordinates)
+    print('Finding channel and cross-section directions')
+    # Find the channel direction and inverse channel direction
+    coordinates = riv.get_direction(coordinates)
+    coordinates = riv.get_inverse_direction(coordinates)
+    coordinates = coordinates.dropna(axis=0, how='any')
 
-        print('Building channel cross sections')
-        # BUILD CROSS-SECTION STRUCTURE
-        types = [
-            ('coords', 'object'), 
-            ('width', 'f8'),
-            ('bank', 'object'),
-            ('xsection', 'object'),
+    # Save the Coordinates file
+    coordinates.to_csv(OutputRoot + 'coordinates.csv')
+
+    print('Building channel cross sections')
+    # BUILD CROSS-SECTION STRUCTURE
+    types = [
+        ('coords', 'object'),
+        ('width', 'f8'),
+        ('bank', 'object'),
+        ('xsection', 'object'),
+    ]
+    xsections = np.array([], dtype=types)
+    # Iterate through each coordinate of the channel centerline
+    for idx, row in coordinates.iterrows():
+        xsection = rh.get_xsection(
+            row,
+            dem,
+            xOrigin,
+            yOrigin,
+            pixelWidth,
+            pixelHeight,
+            SectionLength,
+            xstep,
+            ystep
+        )
+        section = np.array(
+            tuple(
+                [
+                    (row['easting'], row['northing']),
+                    None,
+                    None,
+                    xsection
+                ]
+            ),
+            dtype=xsections.dtype
+        )
+        xsections = np.append(xsections, section)
+
+    print('Smoothing Cross-Sections')
+    # Smooth Cross Sections
+    for idx, section in np.ndenumerate(xsections):
+        print(idx)
+        b = riv.xsection_smoothing(
+            idx,
+            section['xsection'],
+            SectionSmoothing,
+        )
+        xsections[idx[0]]['xsection'] = b
+
+    print('Finding Channel Widths')
+    # Find the channel widths
+    for idx, section in np.ndenumerate(xsections):
+        p = xsections[idx[0]]['xsection']['distance']
+        t = xsections[idx[0]]['xsection']['demvalue_sm']
+        banks, width = riv.find_channel_width(p, t, order=WidthSens)
+        xsections[idx[0]]['bank'] = banks
+        xsections[idx[0]]['width'] = width
+
+    print('Saving Cross-Section Structure')
+    # Save the Channel Cross Sections Structure
+    np.save(OutputRoot + 'xsections.npy', xsections)
+
+    print('Finding Channel Bar Widths')
+    # Find the channel bar widths
+    widths = []
+    eastings = []
+    northings = []
+    # Create a width DF
+    for section in xsections:
+        eastings.append(section[0][0])
+        northings.append(section[0][1])
+        widths.append(section[1])
+    data = {'easting': eastings, 'northing': northings, 'width': widths}
+    width_df = pandas.DataFrame(
+        data=data,
+        columns=['easting', 'northing', 'width']
+    )
+    width_df = width_df.reset_index()
+
+    print('Saving Width DataFrame')
+    # Save the width dataframe
+    width_df.to_csv(OutputRoot + 'width_dataframe')
+
+    # Load in the Bar coordinate data
+    bh = BarHandler()
+    bar_df = pandas.read_csv(BarPath)
+
+    # Convert the Bar Lat Long to UTM Easting Northing
+    myProj = Proj(ProjStr)
+    coord_transform = pandas.DataFrame(
+        columns=[
+            'upstream_lat',
+            'upstream_lon',
+            'upstream_easting',
+            'upstream_northing',
+            'downstream_lat',
+            'downstream_lon',
+            'downstream_easting',
+            'downstream_northing'
         ]
-        xsections = np.array([], dtype=types)
-        # Iterate through each coordinate of the channel centerline
-        for idx, row in coordinates.iterrows():
-            xsection = rh.get_xsection(
-                row, 
-                dem, 
-                xOrigin, 
-                yOrigin, 
-                pixelWidth, 
-                pixelHeight,
-                section_len,
-                xstep,
-                ystep
-            )
-            section = np.array(
-                tuple(
-                    [
-                        (row['easting'], row['northing']), 
-                        None, 
-                        None,
-                        xsection
-                    ]
-                ),
-                dtype=xsections.dtype
-            )
-            xsections = np.append(xsections, section)
-   
-    # Smooth Cross sections if Smoothing is set
-    if section_smoothing:
-        print('Smoothing Cross-Sections')
-        for idx, section in np.ndenumerate(xsections):
-            print(idx)
-            b = riv.xsection_smoothing(
-                idx, 
-                section['xsection'], 
-                section_smoothing
-            )
-            xsections[idx[0]]['xsection'] = b
+    )
+    print('Converting Bar Coordinates to Easting Northing')
+    # Find the channel bar widths
+    for idx, row in bar_df.iterrows():
+        # lat, lon -> utm
+        us_east, us_north = myProj(
+            row['Longitude_us'],
+            row['Latitude_us']
+        )
+        ds_east, ds_north = myProj(
+            row['Longitude_ds'],
+            row['Latitude_ds']
+        )
+        df = pandas.DataFrame(
+            data=[[
+                row['Latitude_us'],
+                row['Longitude_us'],
+                us_east,
+                us_north,
+                row['Latitude_ds'],
+                row['Longitude_ds'],
+                ds_east,
+                ds_north
+            ]],
+            columns=[
+                'upstream_lat',
+                'upstream_lon',
+                'upstream_easting',
+                'upstream_northing',
+                'downstream_lat',
+                'downstream_lon',
+                'downstream_easting',
+                'downstream_northing'
+            ]
+        )
+        coord_transform = coord_transform.append(df)
 
-    if find_width:
-        for idx, section in np.ndenumerate(xsections):
-            p = xsections[idx[0]]['xsection']['distance']
-            if section_smoothing:
-                t = xsections[idx[0]]['xsection']['demvalue_sm']
-            else:
-                t = xsections[idx[0]]['xsection']['demvalue']
-            banks , width = riv.find_channel_width(p, t, order=WIDTH_ORDER)
-            xsections[idx[0]]['bank'] = banks
-            xsections[idx[0]]['width'] = width
+    bar_df = coord_transform.reset_index(drop=True)
 
+    print('Generating Bar-Channel Width Data Structure')
+    # Create Dict with all of the bar and channel widths and ratio
+    n = 1
+    bars_ = {}
+    for idx, bar in bar_df.iterrows():
+        i = 0
+        ratio = []
+        idxs = []
+        name = 'bar_{n}'.format(n=n)
         widths = []
-        eastings = []
-        northings = []
-        for section in xsections:
-            eastings.append(section[0][0])
-            northings.append(section[0][1])
-            widths.append(section[1])
-        data = {'easting': eastings, 'northing': northings, 'width': widths}
-        width_df = pandas.DataFrame(
-            data=data, 
-            columns=['easting', 'northing', 'width']
+        bar_widths = []
+        coords0 = []
+        coords1 = []
+        bar_sections = bh.get_bar_xsections(
+            coordinates,
+            xsections,
+            bar_df.iloc[idx]
         )
-        width_df = width_df.reset_index()
+        for section in bar_sections:
+            if section['width'] == 'nan':
+                widths.append(False)
+            else:
+                widths.append(section['width'])
+                coords0.append(section[0])
+                bar_widths.append(bh.find_bar_width(section['bank']))
 
-    if find_bar_width:
-        bh = BarHandler()
-        bar_df_path = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/test_bars.csv'
-        bar_df = pandas.read_csv(bar_df_path)
-        n = 1
-        bars_ = {}
-        for idx, bar in bar_df.iterrows():
-            i = 0
-            ratio = []
-            idxs = []
-            name = 'bar_{n}'.format(n=n)
-            widths = []
-            bar_widths = []
-            coords0 = []
-            coords1 = []
-            bar_sections = bh.get_bar_xsections(
-                coordinates, 
-                xsections, 
-                bar_df.iloc[idx]
-            )
-            for section in bar_sections:
-                if section['width'] == 'nan':
-                    widths.append(False)
-                else:
-                    widths.append(section['width'])
-                    coords0.append(section[0])
-                    bar_widths.append(bh.find_bar_width(section['bank']))
+        for idx, width in enumerate(widths):
+            i += 1
+            if width and bar_widths[idx]:
+                ratio.append(width/bar_widths[idx])
+                idxs.append(i)
+                coords1.append(coords0[idx])
+        bars_[name] = {
+            'idx': idxs,
+            'coords': coords1,
+            'channel_width': widths,
+            'bar_width': bar_widths,
+            'ratio': ratio
+        }
+        n += 1
 
-            for idx, width in enumerate(widths):
-                i += 1
-                if width and bar_widths[idx]:
-                    ratio.append(width/bar_widths[idx])
-                    idxs.append(i)
-                    coords1.append(coords0[idx])
-            bars_[name] = {'idx': idxs, 'coords': coords1, 'ratio': ratio}
-            n += 1
+    print('Saving Channel Bar - Width JSON')
+    # Turn Bars dictionary into a json and save it
+    with open((OutputRoot + 'bars.json'), 'w') as f:
+        json.dump(bars_, f)
 
-    if visualize:
-        vh = Visualizer(
-            xsections[0]['coords'][0], 
-            xsections[0]['coords'][1]
-        )
-        root = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/plots/'
-        name = 'Trinity_bars.png'
-        vh.plot_downstream_bars(bars_, root + name)
+    print('Generating Visualizations')
+    # Create Visualizations
+    vh = Visualizer(
+        xsections[0]['coords'][0],
+        xsections[0]['coords'][1]
+    )
+    vh.plot_downstream_bars(bars_, (OutputRoot + 'bars.png'))
+    vh.plot_widths(bars_, OutputRoot + 'bars_wh.png')
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description='Return Channel Width and Bar Width Measurements'
+    )
+    parser.add_argument('DEMpath', metavar='dem', type=str,
+                        help='Path to the DEM file')
+    parser.add_argument('CenterlinePath', metavar='c', type=str,
+                        help='Path to the centerline coordinates file')
+    parser.add_argument('BarPath', metavar='b', type=str,
+                        help='Path to the bar coordinates file')
+    parser.add_argument('ProjStr', metavar='p', type=str,
+                        help='Projection String')
+    parser.add_argument('CenterlineSmoothing', metavar='cs', type=int,
+                        help='Smoothing factor for the channel coordinates')
+    parser.add_argument('SectionLength', metavar='sl', type=int,
+                        help='Length of the cross section to take')
+    parser.add_argument('SectionSmoothing', metavar='ss', type=int,
+                        help='Smoothing factor for the cross-sections')
+    parser.add_argument('WidthSens', metavar='ws', type=int,
+                        help='Sensitivity of the channel width measurement')
+    parser.add_argument('OutputRoot', metavar='out', type=str,
+                        help='Root for the file outputs')
+
+    args = parser.parse_args()
+
+    main(args.DEMpath, args.CenterlinePath, args.BarPath,
+         args.ProjStr, args.CenterlineSmoothing, args.SectionLength,
+         args.SectionSmoothing, args.WidthSens, args.OutputRoot)

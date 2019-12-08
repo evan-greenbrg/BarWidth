@@ -25,7 +25,7 @@ class BarHandler():
         self.slope_threshold = 1
         self.slope_smooth = 10
 
-    def get_bar_xsections(self, coordinates, xsection, bar):
+    def get_bar_xsections(self, coordinates, xsections, bar):
         tree = spatial.KDTree(coordinates[['easting', 'northing']])
         distance, upstream_n = tree.query(
             [(bar['upstream_easting'], bar['upstream_northing'])],

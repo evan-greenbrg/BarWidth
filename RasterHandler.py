@@ -74,24 +74,14 @@ class RasterHandler():
         # create coordinate transformation
         inSpatialRef = osr.SpatialReference()
         srs = inSpatialRef.ImportFromEPSG(iEPSG)
-        if srs != 0:
-            raise RuntimeError(repr(res) + ': could not import from EPSG')
 
         outSpatialRef = osr.SpatialReference()
         srs = outSpatialRef.ImportFromEPSG(oEPSG)
-        if srs != 0:
-            raise RuntimeError(repr(res) + ': could not import from EPSG')
 
         coordTransform = osr.CoordinateTransformation(
             inSpatialRef, 
             outSpatialRef
         )
-
-        ct = osr.CoordinateTransformation(
-            inSpatialRef, 
-            outSpatialRef
-        )
-        longitude, latitude, z = ct.TransformPoint(pointX, pointY)
 
         # transform point
         point.Transform(coordTransform)

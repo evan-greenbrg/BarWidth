@@ -186,6 +186,12 @@ class RiverHandler():
         maxi = np.where(d == np.amax(d))[0][0]
         mini = np.where(d == np.amin(d))[0][0]
 
+        # Error Handling
+        if (len(extremes) - 1 < maxi + 1) or (len(extremes) - 1 < mini + 1):
+            print('No Channel Found')
+
+            return False,None
+
         # Save the banks for later
         banks = [
             extremes[maxi + 1][0], 

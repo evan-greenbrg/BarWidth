@@ -1,4 +1,6 @@
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas
 
 class Visualizer():
 
@@ -27,15 +29,14 @@ class Visualizer():
 
     def plot_downstream_bars(self, bars, path):
         """
-        Generates plot of all bar widths as ratio with channel depth
+        Generates plot of all bar widths as ratio with channel width
         going downstream
         """
         bars = self.get_downstream_distance(bars)
 
-
         max0 = 0
         fig = plt.figure(figsize = (11, 7))
-        for key in bars_.keys():
+        for key in bars.keys():
             plt.scatter(bars[key]['distance'], bars[key]['ratio'])
             maxd = max(bars[key]['distance'])
             if maxd > max0:
@@ -44,6 +45,34 @@ class Visualizer():
         line_pl = [i for i in range(0, int(max0), 100)]
         line_val = [1.5 for i in line_pl]
         plt.plot(line_pl, line_val)
-        plt.xlabel('Downstream Distance')
-        plt.ylabel('Channel Width/Bar Width')
+        plt.xlabel('downstream distance')
+        plt.ylabel('channel width/bar width')
         plt.savefig(path)
+
+    def plot_widths(self, bars, path):
+        """
+        Generates plot of all bar widths with respect to channel width
+        """
+
+        width_df = pandas.DataFrame(columns=['channel_width', 'bar_width'])
+        for key in bars.keys():
+            print(key)
+            data = {
+                'channel_width': bars[key]['channel_width'],
+                'bar_width': bars[key]['bar_width']
+            }
+            df = pandas.DataFrame(data=data)
+            width_df = width_df.append(df)
+
+        width_df = width_df.reset_index(drop=True)
+        width_df = width_df.dropna(axis=0, how='any')
+
+        x = np.linspace(0, max(width_df['bar_width']) ,100)
+        y = 1.5*x
+
+        plt.scatter(width_df['bar_width'], width_df['channel_width'])
+        plt.xlabel('Bar Width (m)')
+        plt.ylabel('Channel Width (m)')
+        plt.savefig(path)
+
+

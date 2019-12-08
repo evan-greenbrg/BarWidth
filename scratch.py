@@ -7,9 +7,19 @@
 
 
 # Get X Section
-idx = 50 
+idx = 390
 t = xsections[idx]['xsection']['demvalue_sm']
 p = xsections[idx]['xsection']['distance']
+bank1 = xsections[idx][2][0][0]
+bank2 = xsections[idx][2][1][0]
+b1 = np.where(p == bank1)
+b2 = np.where(p == bank2)
+plt.scatter(bank1, t[b1])
+plt.scatter(bank2, t[b2])
+plt.plot(p, t)
+plt.show()
+
+
 data = {'distance': p, 'elevation': t}
 cross_section = pandas.DataFrame(data=data, columns=['distance', 'elevation'])
 
@@ -120,7 +130,9 @@ ax1 = plt.plot(df_sm['distance'], df_sm['demvalue'])
 plt.plot(x, y, linestyle='dashed')
 plt.show()
 
-np.save('xsections_test_1122', xsections)
+fn = 'xsections_koyukuk_1204.npy'
+np.save(fn, xsections)
+xsections = np.load(fn, allow_pickle=True)
 
 #################################################
 ####         NEXT STEPS                      ####
@@ -166,8 +178,12 @@ plt.show()
 # Start building river dem
 river_dem = np.full(dem.shape, False)
 for idx, row in coordinates.iterrows():
-    x, y = georef.lonlat2pix(gmDEM, row['lon'], row['lat'])
-    river_dem[y, x] = True
+    x, y = georef.lonlat2pix(gmDEM, row['lat'], row['lon'])
+    for i in range(1,100):
+        river_dem[y, x+i] = True
+        river_dem[y, x-i] = True
+        river_dem[y+i, x] = True
+        river_dem[y-i, x] = True
 
 river_mask_d = np.ma.masked_where(
     river_dem == False,
@@ -192,7 +208,7 @@ im1 = plt.imshow(
 # Set up a colormap:
 # use copy so that we do not mutate the global colormap instance
 im2 = plt.imshow(
-    river_dem,
+    river_mask_d,
     interpolation='none',
     cmap=plt.cm.plasma, 
     extent=extent
