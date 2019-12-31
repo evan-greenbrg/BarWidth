@@ -32,8 +32,7 @@ class Visualizer():
         Generates plot of all bar widths as ratio with channel width
         going downstream
         """
-        bars = self.get_downstream_distance(bars)
-
+        plt.close()
         max0 = 0
         fig = plt.figure(figsize = (11, 7))
         for key in bars.keys():
@@ -53,7 +52,7 @@ class Visualizer():
         """
         Generates plot of all bar widths with respect to channel width
         """
-
+        plt.close()
         width_df = pandas.DataFrame(columns=['channel_width', 'bar_width'])
         for key in bars.keys():
             print(key)
@@ -70,6 +69,7 @@ class Visualizer():
         x = np.linspace(0, max(width_df['bar_width']) ,100)
         y = 1.5*x
 
+        plt.close()
         plt.scatter(width_df['bar_width'], width_df['channel_width'])
         plt.xlabel('Bar Width (m)')
         plt.ylabel('Channel Width (m)')

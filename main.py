@@ -9,6 +9,7 @@ from pyproj import Proj
 from BarHandler import BarHandler
 from RasterHandler import RasterHandler
 from RiverHandler import RiverHandler
+from TestHandler import TestHandler
 from Visualizer import Visualizer
 
 
@@ -18,6 +19,7 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
     # Initialize classes, objects
     riv = RiverHandler()
     rh = RasterHandler()
+    test = TestHandler()
     ds = gdal.Open(DEMpath, 0)
     print(ds)
 
@@ -124,12 +126,20 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
         )
         xsections[idx[0]]['xsection'] = b
 
+    print('Generating Test Xsections')
+    test.save_example_sections(
+        xsections,
+        20,
+        OutputRoot + 'Test/'
+    )
+
     print('Finding Channel Widths')
-    # Find the channel widths
+    # Find Optimal Order
     for idx, section in np.ndenumerate(xsections):
         p = xsections[idx[0]]['xsection']['distance']
         t = xsections[idx[0]]['xsection']['demvalue_sm']
         banks, width = riv.find_channel_width(p, t, order=WidthSens)
+
         xsections[idx[0]]['bank'] = banks
         xsections[idx[0]]['width'] = width
 
@@ -159,8 +169,16 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
     width_df.to_csv(OutputRoot + 'width_dataframe')
 
     # Load in the Bar coordinate data
-    bh = BarHandler()
-    bar_df = pandas.read_csv(BarPath)
+    bh = BarHandler(
+        xsections[0]['coords'][0],
+        xsections[0]['coords'][1]
+    )
+    bar_df = pandas.read_csv(
+        BarPath,
+        names=['Latitude_us', 'Longitude_us', 'Latitude_ds', 'Longitude_ds'],
+        header=1,
+        index_col=[0]
+    )
 
     # Convert the Bar Lat Long to UTM Easting Northing
     myProj = Proj(ProjStr)
@@ -214,6 +232,15 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
 
     bar_df = coord_transform.reset_index(drop=True)
 
+    # NEED TO FIX ERROR WHEN IT HITS THIS STEP
+    print('Generating Test Bar Xsections')
+    test.save_example_bar_sections(
+        coordinates,
+        xsections,
+        bar_df,
+        OutputRoot + 'Test/'
+    )
+
     print('Generating Bar-Channel Width Data Structure')
     # Create Dict with all of the bar and channel widths and ratio
     n = 1
@@ -227,11 +254,14 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
         bar_widths = []
         coords0 = []
         coords1 = []
+        # Get the portions of xsections that are the bars
         bar_sections = bh.get_bar_xsections(
             coordinates,
             xsections,
             bar_df.iloc[idx]
         )
+
+        # For each section in bars, find the width
         for section in bar_sections:
             if section['width'] == 'nan':
                 widths.append(False)
@@ -255,6 +285,7 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
         }
         n += 1
 
+    bars_ = bh.get_downstream_distance(bars_)
     print('Saving Channel Bar - Width JSON')
     # Turn Bars dictionary into a json and save it
     with open((OutputRoot + 'bars.json'), 'w') as f:
@@ -262,12 +293,12 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
 
     print('Generating Visualizations')
     # Create Visualizations
-    vh = Visualizer(
-        xsections[0]['coords'][0],
-        xsections[0]['coords'][1]
-    )
-    vh.plot_downstream_bars(bars_, (OutputRoot + 'bars.png'))
-    vh.plot_widths(bars_, OutputRoot + 'bars_wh.png')
+#    vh = Visualizer(
+#        xsections[0]['coords'][0],
+#        xsections[0]['coords'][1]
+#    )
+#    vh.plot_downstream_bars(bars_, (OutputRoot + 'bars.png'))
+#    vh.plot_widths(bars_, OutputRoot + 'bars_wh.png')
 
 
 if __name__ == "__main__":

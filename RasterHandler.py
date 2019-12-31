@@ -1,16 +1,19 @@
+import glob
+import os
 import json
+
 from osgeo import gdal
 import ogr
 import osr
 import rasterio
 import numpy as np
-from rasterio.plot import show
-from rasterio.plot import show_hist
 from rasterio.mask import mask
+from rasterio.merge import merge
 from shapely.geometry import box
 import geopandas as gpd
 from fiona.crs import from_epsg
 import pycrs
+
 
 class RasterHandler():
 
@@ -19,7 +22,8 @@ class RasterHandler():
 
     def get_indices(self, x, y, ox, oy, pw, ph):
         """
-        Gets the row (i) and column (j) indices in an array for a given set of coordinates.
+        Gets the row (i) and column (j) indices in an array
+        for a given set of coordinates.
         :param x:   array of x coordinates (longitude)
         :param y:   array of y coordinates (latitude)
         :param ox:  raster x origin
@@ -28,10 +32,10 @@ class RasterHandler():
         :param ph:  raster pixel height
         :return:    row (i) and column (j) indices
         """
-        
+
         i = np.floor((oy-y) / ph).astype('int')
         j = np.floor((x-ox) / pw).astype('int')
-        
+
         return i, j
 
     def values_from_coordinates(self, ds, dem, coordinates):
@@ -43,9 +47,9 @@ class RasterHandler():
         indices = self.get_indices(
             coordinates['easting'].to_numpy(),
             coordinates['northing'].to_numpy(),
-            xmin, 
-            ymax, 
-            xres, 
+            xmin,
+            ymax,
+            xres,
             -yres
         )
         return dem[indices]
@@ -58,9 +62,9 @@ class RasterHandler():
         height = ds.RasterYSize
         gt = ds.GetGeoTransform()
         minx = gt[0]
-        miny = gt[3] + width*gt[4] + height*gt[5] 
+        miny = gt[3] + width*gt[4] + height*gt[5]
         maxx = gt[0] + width*gt[1] + height*gt[2]
-        maxy = gt[3] 
+        maxy = gt[3]
 
         return minx, miny, maxx, maxy
 
@@ -79,7 +83,7 @@ class RasterHandler():
         srs = outSpatialRef.ImportFromEPSG(oEPSG)
 
         coordTransform = osr.CoordinateTransformation(
-            inSpatialRef, 
+            inSpatialRef,
             outSpatialRef
         )
 
@@ -93,10 +97,9 @@ class RasterHandler():
         Clips raster file based on bounding box coordinates
         """
         opath = self.rename_path(ipath)
-        dem_data = rasterio.open(dem_path)
         data = rasterio.open(ipath)
 
-        dsdem = gdal.Open(DEM_name)
+        dsdem = gdal.Open(dem_path)
         dslandsat = gdal.Open(B3input)
 
         dem_srs = osr.SpatialReference(wkt=dsdem.GetProjection())
@@ -108,16 +111,16 @@ class RasterHandler():
         minx0, miny0, maxx0, maxy0 = self.bounding_coordinates(dsdem)
         bbox = box(minx0, miny0, maxx0, maxy0)
         geo = gpd.GeoDataFrame(
-            {'geometry': bbox}, 
-            index=[0], 
+            {'geometry': bbox},
+            index=[0],
             crs=from_epsg(demEPSG)
         )
         geo = geo.to_crs(crs=dataEPSG)
         coords = [json.loads(geo.to_json())['features'][0]['geometry']]
 
         out_img, out_transform = mask(
-            dataset=data, 
-            shapes=coords, 
+            dataset=data,
+            shapes=coords,
             crop=True
         )
 
@@ -135,7 +138,7 @@ class RasterHandler():
         )
 
         with rasterio.open(opath, "w", **out_meta) as dest:
-           dest.write(out_img)
+            dest.write(out_img)
 
     def rename_path(self, input_path):
         path_sp = input_path.split('/')
@@ -146,37 +149,37 @@ class RasterHandler():
         path_sp[-1] = name
 
         return '/'.join(path_sp)
-    
+
     def get_pixel_size(self, raster_path):
-        raster =  rasterio.open(raster_path)
+        raster = rasterio.open(raster_path)
         gt = raster.transform
         pixelSizeX = gt[0]
-        pixelSizeY =-gt[4]
+        pixelSizeY = -gt[4]
 
         return pixelSizeX, pixelSizeY
 
-    def get_dem_pixels(self, east, north, xOrigin, yOrigin, 
-                    pixelWidth, pixelHeight):
+    def get_dem_pixels(self, east, north, xOrigin, yOrigin,
+                       pixelWidth, pixelHeight):
 
         dem_col = int((east - xOrigin) / pixelWidth)
-        dem_row = int((yOrigin - north ) / pixelHeight)
+        dem_row = int((yOrigin - north) / pixelHeight)
 
         return dem_col, dem_row
 
     def get_coords_by_step(self, easting, northing, dlon_inv, dlat_inv,
                            xstep, ystep, i, sign=1):
         """
-        For a given centerline point, takes the channel direction at that 
+        For a given centerline point, takes the channel direction at that
         point and multiples it by the step to find the next cross-sectional
         point
         """
 
         # Find the next Easting
-        dd_east = dlat_inv * xstep * i
+        dd_east = dlon_inv * xstep * i
         east = easting + (dd_east * sign)
 
         # Find the next Northing
-        dd_north = dlon_inv * ystep * i
+        dd_north = dlat_inv * ystep * i
         north = northing + (dd_north * sign)
 
         # Find the distance between the origin and the new point
@@ -184,20 +187,54 @@ class RasterHandler():
 
         return east, north, distance
 
-    def get_xsection(self, row, dem, xOrigin, yOrigin, pixelWidth, 
+    def files_to_mosaic(self, dirpath, outpath,
+                        search_regex=None, dem_fps=None, write=True):
+        """
+        Takes a directory path and either a search regex or file list
+        to create a mosaic of a bunch of raster tif files.
+        Writes to a specified output path
+        """
+        if search_regex:
+            q = os.path.join(dirpath, search_regex)
+            dem_fps = glob.glob(q)
+
+        src_files_to_mosaic = []
+        for fp in dem_fps:
+            src = rasterio.open(fp)
+            src_files_to_mosaic.append(src)
+
+        mosaic, out_trans = merge(src_files_to_mosaic)
+
+        out_meta = src.meta.copy()
+        out_meta.update(
+            {
+                "driver": "GTiff",
+                "height": mosaic.shape[1],
+                "width": mosaic.shape[2],
+                "transform": out_trans
+            }
+        )
+
+        if write:
+            with rasterio.open(outpath, "w", **out_meta) as dest:
+                dest.write(mosaic)
+
+        return mosaic
+
+    def get_xsection(self, row, dem, xOrigin, yOrigin, pixelWidth,
                      pixelHeight, xlength, xstep, ystep):
 
         demcol, demrow = self.get_dem_pixels(
-            row['easting'], 
-            row['northing'], 
-            xOrigin, 
-            yOrigin, 
+            row['easting'],
+            row['northing'],
+            xOrigin,
+            yOrigin,
             pixelWidth,
             pixelHeight
         )
         types = [
             ('distance', 'f4'),
-            ('easting', 'U10'), 
+            ('easting', 'U10'),
             ('northing', 'U10'),
             ('demcol', 'i4'),
             ('demrow', 'i4'),
@@ -207,9 +244,9 @@ class RasterHandler():
             tuple([
                 0,
                 row['easting'],
-                row['northing'], 
-                demcol, 
-                demrow, 
+                row['northing'],
+                demcol,
+                demrow,
                 row['elev_0'],
             ]),
             dtype=types
@@ -237,18 +274,18 @@ class RasterHandler():
             )
 
             demcol_d, demrow_d = self.get_dem_pixels(
-                eastd, 
-                northd, 
-                xOrigin, 
-                yOrigin, 
+                eastd,
+                northd,
+                xOrigin,
+                yOrigin,
                 pixelWidth,
                 pixelHeight
             )
             demcol_u, demrow_u = self.get_dem_pixels(
-                eastu, 
-                northu, 
-                xOrigin, 
-                yOrigin, 
+                eastu,
+                northu,
+                xOrigin,
+                yOrigin,
                 pixelWidth,
                 pixelHeight
             )
@@ -263,7 +300,7 @@ class RasterHandler():
                 print('Index out of bounds for axis')
                 value_u = None
 
-            d_pos = distanced 
+            d_pos = distanced
             u_pos = distanceu
             dlist = np.array(
                 tuple([d_pos, eastd, northd, demcol_d, demrow_d, value_d]),
@@ -280,7 +317,7 @@ class RasterHandler():
         return xsection
 
 
-def main(B3input, B6input, DEM_name, demEPSG, landsatEPSG):
+def main(B3input, B6input, DEM_name):
 
     rh = RasterHandler()
     rh.clip_raster(B3input, DEM_name)
@@ -296,4 +333,4 @@ if __name__ == "__main__":
     B6input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B6_clip.tiff'
     DEM_name = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/koyukuk_dem_5_clip_2.tif'
 
-    main(B3input, B6input, DEM_name, demEPSG, landsatEPSG)
+    main(B3input, B6input, DEM_name)
