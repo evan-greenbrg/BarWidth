@@ -86,7 +86,8 @@ class RiverHandler():
         Also includes logic to remove the large negative values at non-existent
         from the raw DEM values
         """
-        d = {'distance': section['distance'], 'demvalue': section['demvalue']}
+        demvalue = np.where(section['demvalue'] < 0, None, section['demvalue'])
+        d = {'distance': section['distance'], 'demvalue': demvalue} 
         df = pandas.DataFrame(data=d)
         df = df.fillna(False)
         demvalues, distance = self.knn_smoothing(df, n=smoothing)
@@ -118,21 +119,33 @@ class RiverHandler():
 
         dlon = []
         dlat = []
+        tree = spatial.KDTree(coordinates[['lon', 'lat']])
         for idx, row in coordinates.iterrows():
-            if idx == coordinates.index.max():
-                distance = [
-                    row['lon'] - coordinates.iloc[idx-1]['lon'],
-                    row['lat'] - coordinates.iloc[idx-1]['lat']
-                ]
-                norm = math.sqrt(distance[0] ** 2 + distance[1] ** 2)
-                dlon_t, dlat_t = distance[0] / norm, distance[1] / norm
-            else:
-                distance = [
-                    coordinates.iloc[idx+1]['lon'] - row['lon'],
-                    coordinates.iloc[idx+1]['lat'] - row['lat']
-                ]
-                norm = math.sqrt(distance[0] ** 2 + distance[1] ** 2)
-                dlon_t, dlat_t = distance[0] / norm, distance[1] / norm                   
+            distance, neighbors = tree.query(
+                [(row['lon'], row['lat'])],
+                2
+            )
+            # Find the max and min distance values from the nearest neighbors
+            max_distance = np.argmax(distance[0])
+            max_neighbor = neighbors[0][max_distance]
+            min_distance = np.argmin(distance[0])
+            min_neighbor = neighbors[0][min_distance]
+
+            # Calculate lat and lon distances between coordinates
+            distance = [
+                (
+                    coordinates.iloc[max_neighbor]['lon']
+                    - coordinates.iloc[min_neighbor]['lon']
+                ),
+                (
+                    coordinates.iloc[max_neighbor]['lat']
+                    - coordinates.iloc[min_neighbor]['lat']
+                )
+            ]
+
+            # Converts distance to unit distance
+            norm = math.sqrt(distance[0] ** 2 + distance[1] ** 2)
+            dlon_t, dlat_t = distance[0] / norm, distance[1] / norm
             dlon.append(dlon_t)
             dlat.append(dlat_t)
 
@@ -159,6 +172,7 @@ class RiverHandler():
         and small-> big) and project across the stream. Project works because
         the reference frame of the model has the centerline as distance = 0
         """
+        # Add Step where I Optimize the channel Width
         data = {'distance': p, 'elevation': t}
         cross_section = pandas.DataFrame(data=data, columns=['distance', 'elevation'])
 
@@ -170,6 +184,11 @@ class RiverHandler():
 
         extremes = np.concatenate([maxima, minima])
         extremes = extremes[extremes[:,0].argsort()]
+
+        if len(extremes) == 0:
+            print('No Channel Found')
+
+            return False, None
 
         # Get biggest difference between ADJACENT maxima and minma
         d = []
@@ -185,6 +204,12 @@ class RiverHandler():
                 d.append(diff)
         maxi = np.where(d == np.amax(d))[0][0]
         mini = np.where(d == np.amin(d))[0][0]
+
+        # Error Handling
+        if (len(extremes) - 1 < maxi + 1) or (len(extremes) - 1 < mini + 1):
+            print('No Channel Found')
+
+            return False,None
 
         # Save the banks for later
         banks = [
