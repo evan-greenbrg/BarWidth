@@ -6,9 +6,11 @@ from osgeo import gdal
 import ogr
 import osr
 import rasterio
+import pandas
 import numpy as np
 from rasterio.mask import mask
 from rasterio.merge import merge
+from shapely import geometry
 from shapely.geometry import box
 import geopandas as gpd
 from fiona.crs import from_epsg
@@ -315,6 +317,34 @@ class RasterHandler():
             xsection = np.append(xsection, ulist)
 
         return xsection
+
+    def coordinates_in_dem(self, coordinates, ds, xy):
+        """
+        Finds the coordinates that are within the dem
+        """
+        # Find the EPSG
+        dem_srs = osr.SpatialReference(wkt=ds.GetProjection())
+        EPSG = int(dem_srs.GetAttrValue('AUTHORITY', 1))
+
+        # Find the bounding coordinates of DEM
+        minx, miny, maxx, maxy = self.bounding_coordinates(ds)
+
+        # Create Geopandas bounding geometry from bounding coordinates
+        bbox = box(minx, miny, maxx, maxy)
+        crs = {'init': 'epsg:{}'.format(EPSG)}
+        spoly = gpd.GeoSeries([bbox],crs=crs)
+
+        # Convert coordinate points into spatial points
+        xcol, ycol = xy
+        dem_coordinates = pandas.DataFrame(columns=coordinates.columns)
+        for idx, row in coordinates.iterrows():
+            point = geometry.Point((row[xcol], row[ycol]))
+            if point.within(spoly.geometry.iloc[0]):
+                dem_coordinates = dem_coordinates.append(row)
+
+        print('Original Centerline: {}'.format(len(coordinates)))
+        print('New Centerline: {}'.format(len(dem_coordinates)))
+        return dem_coordinates
 
 
 def main(B3input, B6input, DEM_name):

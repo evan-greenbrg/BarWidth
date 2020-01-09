@@ -174,7 +174,10 @@ class RiverHandler():
         """
         # Add Step where I Optimize the channel Width
         data = {'distance': p, 'elevation': t}
-        cross_section = pandas.DataFrame(data=data, columns=['distance', 'elevation'])
+        cross_section = pandas.DataFrame(
+            data=data, 
+            columns=['distance', 'elevation']
+        )
 
         # Find Maxima and Minima
         maxs = argrelextrema(t, np.greater, order=order)
@@ -187,8 +190,7 @@ class RiverHandler():
 
         if len(extremes) == 0:
             print('No Channel Found')
-
-            return False, None
+            return False, None, None
 
         # Get biggest difference between ADJACENT maxima and minma
         d = []
@@ -208,8 +210,7 @@ class RiverHandler():
         # Error Handling
         if (len(extremes) - 1 < maxi + 1) or (len(extremes) - 1 < mini + 1):
             print('No Channel Found')
-
-            return False,None
+            return False, None, None
 
         # Save the banks for later
         banks = [
@@ -219,10 +220,13 @@ class RiverHandler():
             extremes[mini + 1][0]
         ]
 
+        # Gets the maximum value in the cross section
         try:
             max_val = extremes[maxi + 1]
         except IndexError:
             max_val = extremes[maxi]
+
+        # Get the minimum value in the cross section
         min_val = extremes[mini]
 
         # Take lowest of the two and project across the stream
@@ -253,10 +257,17 @@ class RiverHandler():
             ].to_numpy()[0]
             banks = [opposite_val[0] if not x else x for x in banks]
 
-            width = abs(width_val[0]) + abs(opposite_val[0])
+            if width_val[0] < 0 or opposite_val[0] < 0:
+                width = abs(width_val[0]) + abs(opposite_val[0])
+            else:
+                if width_val[0] > opposite_val[0]:
+                    width = width_val[0] - opposite_val[0]
+                else:
+                    width = opposite_val[0] - width_val[0]
 
-            return [tuple(banks[0:2]), tuple(banks[2:4])], width
+            points = (width_val[0], opposite_val[0])
+
+            return [tuple(banks[0:2]), tuple(banks[2:4])], width, points
         except IndexError:
             print('No Channel Found')
-
-            return False,None
+            return False, None, None
