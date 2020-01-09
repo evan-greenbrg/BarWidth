@@ -8,7 +8,7 @@ Feed the program:
     -   CSV of bar upstream and downstream coordinates (in lat-lon)  
     -   Cross-Section length  
 
-General workflow of the program:  
+Steps of the program:  
     1. Smooths river centerline to reduce angularity  
     2. Converts centerline Lat-Lon to UTM  
     3. Loads DEM into memory  
@@ -26,7 +26,7 @@ General workflow of the program:
     15. Produces a csv of channel bar positions  
     16. Produces a JSON with the coordinates, clinoform widths, channel widths  
 
-Things that could be improved  
+### Things that could be improved  
     - I could feed in UTM initially so I wouldn't have to convert. This is a relic to how I was initially doing things. Mostly not being throughtful about program design.   
     - Width algorithms are fairly naive. The channel width is taken from the biggest positive and biggest negative differences in elevation between two points. This means the program will only find one channel per cross section, which seems fine for what I want to do with the program. The bar is identified by the bank side that has the most gradual slope. I am doing the hard part of identifying whether there is or is not a bar.    
     - There are a number of smoothing parameters that are fed into the program  
