@@ -1,4 +1,5 @@
 import argparse
+import sys
 import json
 
 import gdal
@@ -21,7 +22,6 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
     rh = RasterHandler()
     test = TestHandler()
     ds = gdal.Open(DEMpath, 0)
-    print(ds)
 
     # Load the Centerline Coordinates File
     print('Loading the Centerline File')
@@ -66,6 +66,17 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
     pixelWidth = transform[1]
     pixelHeight = -transform[5]
     xstep, ystep = rh.get_pixel_size(DEMpath)
+
+    # Find what portion of centerline is within the DEM
+    coordinates = rh.coordinates_in_dem(
+        coordinates, 
+        ds,
+        ('easting', 'northing')
+    )
+
+    if len(coordinates) == 0:
+        sys.exit("No coordinates")
+        
 
     # Get values at each coordinate location
     values = rh.values_from_coordinates(ds, dem, coordinates)
@@ -134,11 +145,29 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
     )
 
     print('Finding Channel Widths')
-    # Find Optimal Order
+    # Set up channel bank dataframe
+    bank_df = pandas.DataFrame(columns=['easting', 'northing'])
+
+    # Iterate through exsections to find widths
     for idx, section in np.ndenumerate(xsections):
-        p = xsections[idx[0]]['xsection']['distance']
-        t = xsections[idx[0]]['xsection']['demvalue_sm']
-        banks, width = riv.find_channel_width(p, t, order=WidthSens)
+        xsection = xsections[idx[0]]['xsection']
+        p = xsection['distance']
+        t = xsection['demvalue_sm']
+        banks, width, points = riv.find_channel_width(p, t, order=WidthSens)
+        # banks will be used to find the bar
+        # width will be used for the channel width
+        # points will be used for the banks output product
+
+        if banks:
+            bank0 = xsection[xsection['distance'] == points[0]]
+            data0 = np.append(bank0['easting'], bank0['northing'])
+
+            bank1 = xsection[xsection['distance'] == points[1]]
+            data1 = np.append(bank1['easting'], bank1['northing'])
+
+            data = np.vstack((data0, data1)).astype('float')
+            df = pandas.DataFrame(data, columns=['easting', 'northing'])
+            bank_df = bank_df.append(df)
 
         xsections[idx[0]]['bank'] = banks
         xsections[idx[0]]['width'] = width
@@ -146,6 +175,10 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
     print('Saving Cross-Section Structure')
     # Save the Channel Cross Sections Structure
     np.save(OutputRoot + 'xsections.npy', xsections)
+
+    if len(bank_df) > 0:
+        print('Saving Channel Banks')
+        bank_df.to_csv(OutputRoot + 'channel_banks.csv')
 
     print('Finding Channel Bar Widths')
     # Find the channel bar widths
@@ -176,8 +209,7 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
     bar_df = pandas.read_csv(
         BarPath,
         names=['Latitude_us', 'Longitude_us', 'Latitude_ds', 'Longitude_ds'],
-        header=1,
-        index_col=[0]
+        header=1
     )
 
     # Convert the Bar Lat Long to UTM Easting Northing
@@ -232,6 +264,18 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
 
     bar_df = coord_transform.reset_index(drop=True)
 
+    # Find the bar coords within the DEM
+    bar_df = rh.coordinates_in_dem(
+        bar_df, 
+        ds, 
+        ('upstream_easting', 'upstream_northing')
+    )
+    bar_df = rh.coordinates_in_dem(
+        bar_df, 
+        ds, 
+        ('downstream_easting', 'downstream_northing')
+    )
+
     # NEED TO FIX ERROR WHEN IT HITS THIS STEP
     print('Generating Test Bar Xsections')
     test.save_example_bar_sections(
@@ -245,15 +289,17 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
     # Create Dict with all of the bar and channel widths and ratio
     n = 1
     bars_ = {}
+    # Initialize bar_points df
+    bar_points_df = pandas.DataFrame(columns=['easting', 'northing', 'bar'])
     for idx, bar in bar_df.iterrows():
-        i = 0
-        ratio = []
-        idxs = []
-        name = 'bar_{n}'.format(n=n)
-        widths = []
-        bar_widths = []
-        coords0 = []
-        coords1 = []
+        i = 0 # Index within a bar
+        ratio = [] # Ratio of channel width and bar width
+        idxs = [] # Indexes list for each bar
+        name = 'bar_{n}'.format(n=n) # Name of the bar 
+        widths = [] # Width of the channel
+        bar_widths = [] # Width of the bar
+        coords0 = [] # Coords pairs 
+        coords1 = [] # All coord bars in the bar
         # Get the portions of xsections that are the bars
         bar_sections = bh.get_bar_xsections(
             coordinates,
@@ -268,7 +314,34 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
             else:
                 widths.append(section['width'])
                 coords0.append(section[0])
-                bar_widths.append(bh.find_bar_width(section['bank']))
+                bar_width, bar_points = bh.find_bar_width(section['bank'])
+                bar_widths.append(bar_width)
+
+                if bar_points:
+                    xsection = section['xsection']
+                    bank0 = xsection[xsection['distance'] == bar_points[0]]
+                    data0 = np.append(
+                        [bank0['easting'], bank0['northing']], 
+                        idx
+                    )
+
+                    bank1 = xsection[xsection['distance'] == bar_points[1]]
+                    data1 = np.append(
+                        [bank1['easting'], bank1['northing']], 
+                        idx
+                    )
+
+                    data = np.vstack((data0, data1)).astype('float')
+                    print(data)
+                    df = pandas.DataFrame(
+                        data, 
+                        columns=['easting', 'northing', 'bar']
+                    )
+                    bar_points_df = bar_points_df.append(df)
+
+        if len(bar_points_df) > 0:
+            print('Saving Channel Bars')
+            bar_points_df.to_csv(OutputRoot + 'channel_bars.csv')
 
         for idx, width in enumerate(widths):
             i += 1
@@ -290,15 +363,6 @@ def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
     # Turn Bars dictionary into a json and save it
     with open((OutputRoot + 'bars.json'), 'w') as f:
         json.dump(bars_, f)
-
-    print('Generating Visualizations')
-    # Create Visualizations
-#    vh = Visualizer(
-#        xsections[0]['coords'][0],
-#        xsections[0]['coords'][1]
-#    )
-#    vh.plot_downstream_bars(bars_, (OutputRoot + 'bars.png'))
-#    vh.plot_widths(bars_, OutputRoot + 'bars_wh.png')
 
 
 if __name__ == "__main__":

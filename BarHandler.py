@@ -45,20 +45,17 @@ class BarHandler():
         Simplest approach I can implement. Use the extrema found from the
         Width finder. Pick the side that has the greatest difference between
         the bank maxima and minima
-	Returns a sign:
-	    - Positive means the bar is on the positive side 
-	    - Negative means the bar is on the negative side of the channel
         """
         if not banks:
-            return False
+            return False, None
 
         distance0 = abs(banks[0][0] - banks[0][1])
         distance1 = abs(banks[1][0] - banks[1][1])
 
         if distance0 > distance1:
-            return distance0
+            return distance0, (banks[0][0], banks[0][1])
         elif distance1 > distance0:
-            return distance1
+            return distance1, (banks[1][0], banks[1][1])
 
 
     def find_bar_side1(self, bar_section, dem_col):
