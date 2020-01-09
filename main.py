@@ -14,11 +14,6 @@ from TestHandler import TestHandler
 from Visualizer import Visualizer
 
 
-# Next Two Additions
-# DONE # 1. Only use part of centerline dataframe that overlaps with DEM
-# DONE # 2. Produce csv with coordinates of each river bank (where there is width)
-# DONE # 3. Produce csv with coordinates of bar width point
-
 def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
          SectionLength, SectionSmoothing, WidthSens, OutputRoot):
 
