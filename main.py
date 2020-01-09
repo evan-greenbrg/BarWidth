@@ -14,14 +14,19 @@ from TestHandler import TestHandler
 from Visualizer import Visualizer
 
 
-def main(DEMpath, CenterlinePath, BarPath, ProjStr, CenterlineSmoothing,
+def main(DEMpath, CenterlinePath, BarPath, CenterlineSmoothing,
          SectionLength, SectionSmoothing, WidthSens, OutputRoot):
 
-    # Initialize classes, objects
+    # Initialize classes, objects, get ProjStr
     riv = RiverHandler()
     rh = RasterHandler()
     test = TestHandler()
     ds = gdal.Open(DEMpath, 0)
+    ProjStr = "epsg:{0}".format(
+        osr.SpatialReference(
+            wkt=ds.GetProjection()
+        ).GetAttrValue('AUTHORITY', 1)
+    )
 
     # Load the Centerline Coordinates File
     print('Loading the Centerline File')
@@ -375,8 +380,6 @@ if __name__ == "__main__":
                         help='Path to the centerline coordinates file')
     parser.add_argument('BarPath', metavar='b', type=str,
                         help='Path to the bar coordinates file')
-    parser.add_argument('ProjStr', metavar='p', type=str,
-                        help='Projection String')
     parser.add_argument('CenterlineSmoothing', metavar='cs', type=int,
                         help='Smoothing factor for the channel coordinates')
     parser.add_argument('SectionLength', metavar='sl', type=int,
@@ -391,5 +394,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     main(args.DEMpath, args.CenterlinePath, args.BarPath,
-         args.ProjStr, args.CenterlineSmoothing, args.SectionLength,
+         args.CenterlineSmoothing, args.SectionLength,
          args.SectionSmoothing, args.WidthSens, args.OutputRoot)
