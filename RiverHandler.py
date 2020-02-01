@@ -164,14 +164,23 @@ class RiverHandler():
 
         return coordinates
 
-    def find_channel_width(self, p, t, order):
+    def find_channel_width(self, section, order):
         """
         Finds the endpoints of the channel from which the width will be 
         calculated. Uses the biggest difference between adjeacent maxima and
         minima. It will then take the lowest of the two extremes (big->small
         and small-> big) and project across the stream. Project works because
         the reference frame of the model has the centerline as distance = 0
+
+        Outputs - 
+        banks: list of tuple of two channel banks - used to find the bar
+        width: numeric channel width from bank top to bank top 
+        points: distance indexes of the channel bank tops
         """
+        # Gets the channel geometry
+        p = section['distance']
+        t = section['demvalue_sm']
+
         # Add Step where I Optimize the channel Width
         data = {'distance': p, 'elevation': t}
         cross_section = pandas.DataFrame(
@@ -271,3 +280,56 @@ class RiverHandler():
         except IndexError:
             print('No Channel Found')
             return False, None, None
+
+    def get_bank_positions(self, xsection, points):
+        """
+        Takes the points from the channel_widths and turns them into a 
+        dataframe to save all of the channel banks for output
+
+        Inputs - 
+        xsection: Numpy structure of the cross-section
+        points: Distance indexes for the channel margins
+        """
+        # Get the data for one side
+        bank0 = xsection[xsection['distance'] == points[0]]
+        data0 = np.append(bank0['easting'], bank0['northing'])
+
+        # Get the data for the other side
+        bank1 = xsection[xsection['distance'] == points[1]]
+        data1 = np.append(bank1['easting'], bank1['northing'])
+
+        data = np.vstack((data0, data1)).astype('float')
+
+        return pandas.DataFrame(data, columns=['easting', 'northing'])
+    
+    def save_channel_widths(self, xsections):
+        """
+        Takes the major cross-section structure and parses out the
+        channel widths.
+
+        Inputs -
+        xsections: Numpy structure of all channel cross-sections and their
+            properties
+
+        Outputs -
+        width_df: pandas dataframe of the channel widths by position
+        """
+        # Find the channel bar widths
+        widths = []
+        eastings = []
+
+        northings = []
+        # Create a width DF
+        for section in xsections:
+            eastings.append(section[0][0])
+            northings.append(section[0][1])
+            widths.append(section[1])
+
+        # Save as pandas dataframe
+        data = {'easting': eastings, 'northing': northings, 'width': widths}
+        width_df = pandas.DataFrame(
+            data=data,
+            columns=['easting', 'northing', 'width']
+        )
+        
+        return width_df.reset_index()

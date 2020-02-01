@@ -342,8 +342,6 @@ class RasterHandler():
             if point.within(spoly.geometry.iloc[0]):
                 dem_coordinates = dem_coordinates.append(row)
 
-        print('Original Centerline: {}'.format(len(coordinates)))
-        print('New Centerline: {}'.format(len(dem_coordinates)))
         return dem_coordinates
 
 

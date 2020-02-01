@@ -1,22 +1,12 @@
-import math
 import statistics
-import cv2
-import gdal
+
 import numpy as np
 import pandas
 from pyproj import Proj
-from rivamap import preprocess, singularity_index, delineate, georef, visualization
-import rasterio
-from rasterio.plot import show
-from scipy.signal import argrelextrema
-from scipy.ndimage import label as ndlabel
-from scipy.ndimage import sum as ndsum
 from scipy import spatial 
+from scipy.optimize import curve_fit
 
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimgkjk
-import matplotlib.colors as colors
-
+from matplotlib import pyplot as plt
 
 
 class BarHandler():
@@ -40,6 +30,216 @@ class BarHandler():
         
         return xsections[upstream_n[0]:downstream_n[0]]
 
+    def convert_bar_to_utm(self, myProj, bar_df):
+        """
+        Converts the coordinates in the bar .csv file from lat-lon to UTM
+
+        Inputs - 
+        myProj: Proj string used to convert between projects
+        bar_df: pandas dataframe of the bar upstream and downstream 
+            coordinates
+
+        Outputs -
+        bar_df: pandas dataframe of bar coords in lat-lon AND UTM
+        """
+        # Set up the column names and the dataframe
+        columns=[
+            'upstream_lat',
+            'upstream_lon',
+            'upstream_easting',
+            'upstream_northing',
+            'downstream_lat',
+            'downstream_lon',
+            'downstream_easting',
+            'downstream_northing'
+        ]
+        coord_transform = pandas.DataFrame(
+            columns=columns
+        )
+
+        # Iterate through Incoming bar df and convert
+        for idx, row in bar_df.iterrows():
+            us_east, us_north = myProj(
+                row['Longitude_us'],
+                row['Latitude_us']
+            )
+            ds_east, ds_north = myProj(
+                row['Longitude_ds'],
+                row['Latitude_ds']
+            )
+
+            # Set up append dataframe
+            df = pandas.DataFrame(
+                data=[[
+                    row['Latitude_us'],
+                    row['Longitude_us'],
+                    us_east,
+                    us_north,
+                    row['Latitude_ds'],
+                    row['Longitude_ds'],
+                    ds_east,
+                    ds_north
+                ]],
+                columns=columns
+            )
+            coord_transform = coord_transform.append(df)
+
+        return coord_transform.reset_index(drop=True)
+
+    def find_bar_side(self, banks):
+        """
+        Similar implementation as the bar width, 
+        but I'm just using it to find the bar side
+
+        Inputs -
+        banks: list of tuples of the channel bank pairs (max / min position)
+            on the channel bank.
+        xsection:  structure that includes distance and dem value
+        """
+        # Return if there are no banks
+        if not banks:
+            return False
+
+        # Find the distance between channel bank points. Bar should have min
+        distance0 = abs(banks[0][0] - banks[0][1])
+        distance1 = abs(banks[1][0] - banks[1][1])
+
+        # creates tuple from the banks list for deciding the bank side
+        if distance1 > distance0:
+            return (banks[1][1], banks[1][0])
+        else: 
+            return (banks[0][0], banks[0][1])
+
+    def flip_bars(self, section, banks):
+        """
+        Flips the bar cross-sections so that they bar-side is always oriented in the same way.
+        The bar side will be such that the heighest bar point will be at
+        a greater distance than the lowest bar point (I.E. sloped upwards)
+
+        Inputs - 
+        section: the bar section structure that is being worked
+        banks: the tuple of the banks positions
+        """
+
+        # Find the banks elevations for the direction of the section
+        e0 = section['xsection'][
+                section['xsection']['distance'] == banks[0]
+        ]['demvalue_sm'][0]
+        
+        e1 = section['xsection'][
+                section['xsection']['distance'] == banks[1]
+        ]['demvalue_sm'][0]
+
+        # e0 -earlier of the two bar points
+        # e1 is the latter of the two bar points
+        if e1 > e0:
+            section['xsection']['distance'] = np.flip(section['xsection']['distance'], 0)
+            banks = (banks[0] * -1, banks[1] * -1)
+
+        return section, banks
+
+    def find_maximum_slope(self, section, banks, value='demvalue_sm', step=5):
+        """
+        Finds the index of the maximum slope on the bar side
+        Finds the local slopes over some step length
+        
+        Inputs - 
+        section: The data structure that has distances and dem values (Table)
+        banks: The tuple with the distances of the banks
+        value (optional): the name of the value column in the section struct
+        ste (optional): How many points to smooth over to find the slope
+        """
+
+        # Find the section indexes of the bar bank
+        banks_idx = [
+            i 
+            for i, val 
+            in enumerate(section['distance'])
+            if (val == banks[0]) or (val == banks[1])
+        ]
+
+        # Filter the section into just the bar to find the slope
+        banks_section = section[min(banks_idx):max(banks_idx)][::step]
+
+        # Find all of the slopes on the bar bank
+        ydiffs = np.diff(banks_section[value])
+        xdiffs = np.diff(banks_section['distance'])
+
+        # Find the index of the maximum bar slope
+        idx = [
+            i 
+            for i, val 
+            in enumerate(abs(ydiffs))
+            if (val == max(abs(ydiffs)))
+        ]
+
+        # Find the slope
+        dydx = (ydiffs[idx] / xdiffs[idx])[0]
+
+        # Find the corresponding index in the entire section structure
+        max_idx = [
+            i 
+            for i, val 
+            in enumerate(section['distance']) 
+            if (val == banks_section[idx[0] - 1]['distance'])
+        ]
+
+        return section[max_idx[0]]['distance'], dydx 
+
+    def shift_cross_section_down(self, section, banks):
+        """
+        Shifts the cross section down to the minimum channel position
+        This makes it easy to fit the sigmoid
+        
+        Inputs = 
+        section: Numpy structure containing the cross section data
+        banks: tuple with the distance positions of the two banks points
+        """
+        # Find the banks positions in the structure
+        bar_section = section['xsection'][
+            (section['xsection']['distance'] == min(banks))
+            | (section['xsection']['distance'] == max(banks))
+        ]
+
+        # Get minimnum elevation on the banks
+        M = min(bar_section['demvalue_sm'])
+
+        # Shift the cross section
+        section['xsection']['demvalue_sm'] = (
+            section['xsection']['demvalue_sm'] - M
+        )
+
+        return section
+
+    def fit_sigmoid_parameters(self, section, banks, x0, dydx):
+        """
+        Fits the paramters values for the sigmoid function. 
+        This includes:
+            L - the sigmoid top asymptote
+            x0 - the x value where maximum slope is
+            k - the growth rate
+
+        Inputs -
+        section: Numpy structure contianing the cross-section data
+        x0: the distance position where the maximum slope is
+        dydx: the bar's maximum slope
+        """
+        # Find the banks positions in the structure
+        bar_section = section['xsection'][
+            (section['xsection']['distance'] == min(banks))
+            | (section['xsection']['distance'] == max(banks))
+        ]
+
+        # Get maximum elevation on the banks
+        L = max(bar_section['demvalue_sm'])
+
+        # Solve for growth rate, k
+        k = (4 * dydx) / L
+
+        return [L, x0, k] 
+
+
+
     def find_bar_width(self, banks):
         """
         Simplest approach I can implement. Use the extrema found from the
@@ -47,7 +247,7 @@ class BarHandler():
         the bank maxima and minima
         """
         if not banks:
-            return False, None
+            return False, False
 
         distance0 = abs(banks[0][0] - banks[0][1])
         distance1 = abs(banks[1][0] - banks[1][1])
@@ -168,3 +368,103 @@ class BarHandler():
             bars[key]['distance'] = distance
 
         return bars
+
+    def get_bar_geometry(self, p, sigmoid, sens=.00015):
+        """
+        From the given sigmoid parameters finds the bar width.
+        Uses X% of the asymptote cutoff value to find the width end points
+        Will also return the height
+
+        Inputs -
+        p: Array of channel distances to fit the sigmoid to
+        sigmoid: sigmoir parameters
+
+        Outputs -
+        bar_width: width of the fit clinoform
+        bar_height: height of the fit clinoform
+        """
+        # Set up sigmoid function
+        def sigmoid_fun(x, L ,x0, k):
+            y = L / (1 + np.exp(-k*(x-x0)))
+            return (y)
+
+        # Set up x array
+        pos_x = np.linspace(
+            min(p), 
+            max(p),
+            len(p)
+        )
+
+        # Generte dataframe and create the sigmoid values
+        df = pandas.DataFrame(data={
+            'distance': np.round(pos_x, 0),
+            'elevation': sigmoid_fun(pos_x, *sigmoid)
+        })
+
+        # Find the middle point (x0) will use this to iterate both directions
+        middle_point = [
+            i 
+            for i, val 
+            in enumerate(df['distance']) 
+            if val == round(sigmoid[1], 0)
+        ]
+
+        # Get the top of the clinoform 
+        top_df = df.iloc[middle_point[0]:].reset_index(drop=True)
+        top_df['diff'] = top_df['elevation'].diff()
+        top_df = top_df[top_df['diff'] > sens]
+        if len(top_df) > 0:
+            top = top_df[top_df['elevation'] == max(top_df['elevation'])]
+        else:
+            top = []
+
+        # Get the bottom of the clinoform 
+        bot_df = df.iloc[:middle_point[0]].reset_index(drop=True).iloc[::-1]
+        bot_df['diff'] = bot_df['elevation'].diff()
+        bot_df = bot_df[bot_df['diff'] < (-1 * sens)]
+
+        if len(bot_df) > 0:
+            bot = bot_df[bot_df['elevation'] == min(bot_df['elevation'])]
+        else:
+            bot = [] 
+
+        # Calculate geometry
+        if len(top) > 0 and len(bot) > 0:
+            width = float(top['distance']) - float(bot['distance'])
+            height = float(top['elevation']) - float(bot['elevation'])
+        else:
+            width = False
+            height = False
+
+        return width, height
+
+    def fit_sigmoid(self, section, distance, value):
+        """
+        Fits the sigmoid to the bar
+        section: numpy structure of the channel cross-section
+        distance: name of the distance column to use in the section struct
+        value: name of the value column to use in the section struct
+        """
+
+        def sigmoid(x, L ,x0, k):
+            y = L / (1 + np.exp(-k*(x-x0)))
+            return (y)
+        
+        section = section[section[value] > 0]
+        
+        p0 = [
+            max(section[value]), 
+            np.median(section[distance]),
+            1,
+            min(section[value])
+        ] 
+        popt, pcov = curve_fit(
+        	sigmoid, 
+        	section[distance], 
+        	section[value], 
+        	p0, 
+        	method='dogbox', 
+        	maxfev=100000,
+        )
+        
+        return popt
