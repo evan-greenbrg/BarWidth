@@ -3,6 +3,7 @@ import sys
 import json
 
 import gdal
+import osr
 import numpy as np
 import pandas
 from pyproj import Proj
@@ -43,9 +44,8 @@ def main(DEMpath, CenterlinePath, BarPath, CenterlineSmoothing,
         coordinates, n=CenterlineSmoothing
     )
 
-    # MATCH PROJECTIONS
-    # Convert between landsat and dem projections and lat,WGS_1984 lon to utm
-    print('Converting coordinates to projection')
+    # Convert centerline in Lat-Lon to UTM
+    print('Converting coordinates to UTM')
     myProj = Proj(ProjStr)
     coord_transform = pandas.DataFrame(
         columns=['lon', 'lat', 'easting', 'northing']
@@ -61,8 +61,8 @@ def main(DEMpath, CenterlinePath, BarPath, CenterlineSmoothing,
 
     coordinates = coord_transform.reset_index(drop=True)
 
-    print('Loading DEM Data and MetaData')
     # Loading DEM data and metadata
+    print('Loading DEM Data and MetaData')
     dem = ds.ReadAsArray()
 
     transform = ds.GetGeoTransform()
@@ -87,8 +87,8 @@ def main(DEMpath, CenterlinePath, BarPath, CenterlineSmoothing,
     values = rh.values_from_coordinates(ds, dem, coordinates)
     coordinates['elev_0'] = values
 
-    print('Finding channel and cross-section directions')
     # Find the channel direction and inverse channel direction
+    print('Finding channel and cross-section directions')
     coordinates = riv.get_direction(coordinates)
     coordinates = riv.get_inverse_direction(coordinates)
     coordinates = coordinates.dropna(axis=0, how='any')
@@ -96,8 +96,8 @@ def main(DEMpath, CenterlinePath, BarPath, CenterlineSmoothing,
     # Save the Coordinates file
     coordinates.to_csv(OutputRoot + 'coordinates.csv')
 
+    # Build the cross-section structure
     print('Building channel cross sections')
-    # BUILD CROSS-SECTION STRUCTURE
     types = [
         ('coords', 'object'),
         ('width', 'f8'),
@@ -107,32 +107,38 @@ def main(DEMpath, CenterlinePath, BarPath, CenterlineSmoothing,
     xsections = np.array([], dtype=types)
     # Iterate through each coordinate of the channel centerline
     for idx, row in coordinates.iterrows():
-        xsection = rh.get_xsection(
-            row,
-            dem,
-            xOrigin,
-            yOrigin,
-            pixelWidth,
-            pixelHeight,
-            SectionLength,
-            xstep,
-            ystep
-        )
+        # Get the cross-section and set-up numpy stucture
         section = np.array(
             tuple(
                 [
                     (row['easting'], row['northing']),
                     None,
                     None,
-                    xsection
+                    rh.get_xsection(
+                        row,
+                        dem,
+                        xOrigin,
+                        yOrigin,
+                        pixelWidth,
+                        pixelHeight,
+                        SectionLength,
+                        xstep,
+                        ystep
+                    )
                 ]
             ),
             dtype=xsections.dtype
         )
         xsections = np.append(xsections, section)
 
-    print('Smoothing Cross-Sections')
+    # Load in the Bar coordinate data
+    bh = BarHandler(
+        xsections[0]['coords'][0],
+        xsections[0]['coords'][1]
+    )
+
     # Smooth Cross Sections
+    print('Smoothing Cross-Sections')
     for idx, section in np.ndenumerate(xsections):
         print(idx)
         b = riv.xsection_smoothing(
@@ -142,6 +148,7 @@ def main(DEMpath, CenterlinePath, BarPath, CenterlineSmoothing,
         )
         xsections[idx[0]]['xsection'] = b
 
+    # Make some test cross-section
     print('Generating Test Xsections')
     test.save_example_sections(
         xsections,
@@ -150,67 +157,42 @@ def main(DEMpath, CenterlinePath, BarPath, CenterlineSmoothing,
     )
 
     print('Finding Channel Widths')
-    # Set up channel bank dataframe
+    # Set up channel banks dataframe
     bank_df = pandas.DataFrame(columns=['easting', 'northing'])
 
     # Iterate through exsections to find widths
     for idx, section in np.ndenumerate(xsections):
-        xsection = xsections[idx[0]]['xsection']
-        p = xsection['distance']
-        t = xsection['demvalue_sm']
-        banks, width, points = riv.find_channel_width(p, t, order=WidthSens)
-        # banks will be used to find the bar
-        # width will be used for the channel width
-        # points will be used for the banks output product
+        # Finds the channel width and associated points
+        banks, width, points = riv.find_channel_width(
+            xsections[idx[0]]['xsection'], 
+            order=WidthSens
+        )
 
+        # If the program found channel banks will construct banks dataframe
         if banks:
-            bank0 = xsection[xsection['distance'] == points[0]]
-            data0 = np.append(bank0['easting'], bank0['northing'])
+            bank_df = bank_df.append(riv.get_bank_positions(
+                xsections[idx[0]]['xsection'], 
+                points
+            ))
 
-            bank1 = xsection[xsection['distance'] == points[1]]
-            data1 = np.append(bank1['easting'], bank1['northing'])
-
-            data = np.vstack((data0, data1)).astype('float')
-            df = pandas.DataFrame(data, columns=['easting', 'northing'])
-            bank_df = bank_df.append(df)
-
+        # Save width values to the major cross-section structure
         xsections[idx[0]]['bank'] = banks
         xsections[idx[0]]['width'] = width
 
-    print('Saving Cross-Section Structure')
     # Save the Channel Cross Sections Structure
+    print('Saving Cross-Section Structure')
     np.save(OutputRoot + 'xsections.npy', xsections)
 
     if len(bank_df) > 0:
         print('Saving Channel Banks')
         bank_df.to_csv(OutputRoot + 'channel_banks.csv')
 
-    print('Finding Channel Bar Widths')
-    # Find the channel bar widths
-    widths = []
-    eastings = []
-    northings = []
-    # Create a width DF
-    for section in xsections:
-        eastings.append(section[0][0])
-        northings.append(section[0][1])
-        widths.append(section[1])
-    data = {'easting': eastings, 'northing': northings, 'width': widths}
-    width_df = pandas.DataFrame(
-        data=data,
-        columns=['easting', 'northing', 'width']
-    )
-    width_df = width_df.reset_index()
-
-    print('Saving Width DataFrame')
     # Save the width dataframe
-    width_df.to_csv(OutputRoot + 'width_dataframe')
+    print('Saving Width DataFrame')
+    riv.save_channel_widths(xsections).to_csv(OutputRoot + 'width_dataframe')
 
-    # Load in the Bar coordinate data
-    bh = BarHandler(
-        xsections[0]['coords'][0],
-        xsections[0]['coords'][1]
-    )
+    # Read in the bar file to find the channel bars
+    print('Loading Bar .csv file')
     bar_df = pandas.read_csv(
         BarPath,
         names=['Latitude_us', 'Longitude_us', 'Latitude_ds', 'Longitude_ds'],
@@ -218,58 +200,11 @@ def main(DEMpath, CenterlinePath, BarPath, CenterlineSmoothing,
     )
 
     # Convert the Bar Lat Long to UTM Easting Northing
-    myProj = Proj(ProjStr)
-    coord_transform = pandas.DataFrame(
-        columns=[
-            'upstream_lat',
-            'upstream_lon',
-            'upstream_easting',
-            'upstream_northing',
-            'downstream_lat',
-            'downstream_lon',
-            'downstream_easting',
-            'downstream_northing'
-        ]
-    )
     print('Converting Bar Coordinates to Easting Northing')
-    # Find the channel bar widths
-    for idx, row in bar_df.iterrows():
-        # lat, lon -> utm
-        us_east, us_north = myProj(
-            row['Longitude_us'],
-            row['Latitude_us']
-        )
-        ds_east, ds_north = myProj(
-            row['Longitude_ds'],
-            row['Latitude_ds']
-        )
-        df = pandas.DataFrame(
-            data=[[
-                row['Latitude_us'],
-                row['Longitude_us'],
-                us_east,
-                us_north,
-                row['Latitude_ds'],
-                row['Longitude_ds'],
-                ds_east,
-                ds_north
-            ]],
-            columns=[
-                'upstream_lat',
-                'upstream_lon',
-                'upstream_easting',
-                'upstream_northing',
-                'downstream_lat',
-                'downstream_lon',
-                'downstream_easting',
-                'downstream_northing'
-            ]
-        )
-        coord_transform = coord_transform.append(df)
-
-    bar_df = coord_transform.reset_index(drop=True)
+    bar_df = bh.convert_bar_to_utm(myProj, bar_df)
 
     # Find the bar coords within the DEM
+    print('Find Bars within the DEM')
     bar_df = rh.coordinates_in_dem(
         bar_df, 
         ds, 
@@ -281,7 +216,7 @@ def main(DEMpath, CenterlinePath, BarPath, CenterlineSmoothing,
         ('downstream_easting', 'downstream_northing')
     )
 
-    # NEED TO FIX ERROR WHEN IT HITS THIS STEP
+    # Generate test cross sections
     print('Generating Test Bar Xsections')
     test.save_example_bar_sections(
         coordinates,
@@ -290,85 +225,141 @@ def main(DEMpath, CenterlinePath, BarPath, CenterlineSmoothing,
         OutputRoot + 'Test/'
     )
 
-    print('Generating Bar-Channel Width Data Structure')
-    # Create Dict with all of the bar and channel widths and ratio
-    n = 1
-    bars_ = {}
-    # Initialize bar_points df
-    bar_points_df = pandas.DataFrame(columns=['easting', 'northing', 'bar'])
+    # Make structure that contains the sections for each bar
+    print('Making Bar section structure')
+    bar_sections = {} 
     for idx, bar in bar_df.iterrows():
-        i = 0 # Index within a bar
-        ratio = [] # Ratio of channel width and bar width
-        idxs = [] # Indexes list for each bar
-        name = 'bar_{n}'.format(n=n) # Name of the bar 
-        widths = [] # Width of the channel
-        bar_widths = [] # Width of the bar
-        coords0 = [] # Coords pairs 
-        coords1 = [] # All coord bars in the bar
-        # Get the portions of xsections that are the bars
-        bar_sections = bh.get_bar_xsections(
+        sections = bh.get_bar_xsections(
             coordinates,
             xsections,
             bar_df.iloc[idx]
         )
+        bar_sections[str(idx)] = sections
 
-        # For each section in bars, find the width
-        for section in bar_sections:
-            if section['width'] == 'nan':
-                widths.append(False)
+    # Make structure that contains the sigmoids and only the bar side section
+    print('Fitting sigmoid to channel bars')
+    bar_widths = {}
+    types = [
+        ('location', 'object'),
+        ('width', 'f8'),
+        ('sigmoid', 'object'),
+        ('easting', 'object'),
+        ('northing', 'object'),
+        ('distance', 'object'),
+        ('elevation', 'object'),
+    ]
+    for bar, sections in bar_sections.items():
+        widths = np.array([], dtype=types)
+        for idx, section in np.ndenumerate(sections):
+            if section['width'] == 'nan' or not section['bank']:
+                width = np.array(
+                    tuple(
+                        [
+                            section[0],
+                            section['width'],
+                            None,
+                            section['xsection']['easting'],
+                            section['xsection']['northing'],
+                            section['xsection']['distance'],
+                            section['xsection']['demvalue_sm']
+                        ]
+                    ),
+                    dtype=widths.dtype
+                )
             else:
-                widths.append(section['width'])
-                coords0.append(section[0])
-                bar_width, bar_points = bh.find_bar_width(section['bank'])
-                bar_widths.append(bar_width)
+                # Find the side of the channel with the bar
+                banks = bh.find_bar_side(section['bank'])
 
-                if bar_points:
-                    xsection = section['xsection']
-                    bank0 = xsection[xsection['distance'] == bar_points[0]]
-                    data0 = np.append(
-                        [bank0['easting'], bank0['northing']], 
-                        idx
-                    )
+                # Flip the cross-sections so that they are all facing the same way
+                section, banks = bh.flip_bars(section, banks)
 
-                    bank1 = xsection[xsection['distance'] == bar_points[1]]
-                    data1 = np.append(
-                        [bank1['easting'], bank1['northing']], 
-                        idx
-                    )
+                # Find the distance for maximum slope and the maximum slope
+                x0 , dydx = bh.find_maximum_slope(
+                    section['xsection'], 
+                    banks
+                )
 
-                    data = np.vstack((data0, data1)).astype('float')
-                    print(data)
-                    df = pandas.DataFrame(
-                        data, 
-                        columns=['easting', 'northing', 'bar']
-                    )
-                    bar_points_df = bar_points_df.append(df)
+                # Find the minimum and shift the cross-section
+                section = bh.shift_cross_section_down(section, banks)
 
-        if len(bar_points_df) > 0:
-            print('Saving Channel Bars')
-            bar_points_df.to_csv(OutputRoot + 'channel_bars.csv')
+                # Fit sigmoid parameters
+                popt = bh.fit_sigmoid_parameters(section, banks, x0, dydx)
 
-        for idx, width in enumerate(widths):
-            i += 1
-            if width and bar_widths[idx]:
-                ratio.append(width/bar_widths[idx])
-                idxs.append(i)
-                coords1.append(coords0[idx])
-        bars_[name] = {
-            'idx': idxs,
-            'coords': coords1,
-            'channel_width': widths,
-            'bar_width': bar_widths,
-            'ratio': ratio
-        }
-        n += 1
+                # store the sigmoid parameters and the cross section
+                width = np.array(
+                    tuple(
+                        [
+                            section[0],
+                            section['width'],
+                            popt,
+                            section['xsection']['easting'],
+                            section['xsection']['northing'],
+                            section['xsection']['distance'],
+                            section['xsection']['demvalue_sm']
+                        ]
+                    ),
+                    dtype=widths.dtype
+                )
 
-    bars_ = bh.get_downstream_distance(bars_)
-    print('Saving Channel Bar - Width JSON')
-    # Turn Bars dictionary into a json and save it
-    with open((OutputRoot + 'bars.json'), 'w') as f:
-        json.dump(bars_, f)
+            widths = np.append(widths, width)
 
+        bar_widths[bar] = widths
+
+    # Find the width and height of the channel bars
+    print('Finding clinoform width and height')
+    columns = [
+        'bar', 
+        'idx', 
+        'easting', 
+        'northing', 
+        'channel_width', 
+        'bar_width',
+        'bar_height'
+    ]
+    bar_data_df = pandas.DataFrame(columns=columns)
+    n = 0
+    for bar, sections in bar_widths.items():
+        print(bar)
+        L_mean = np.median(
+            [i['sigmoid'][0] for i in sections if i['sigmoid']]
+        )
+        for idx, section in np.ndenumerate(sections):
+            # Don't track if there is no channel width
+            if str(section['width']) == 'nan':
+                continue
+
+            # Filter out the ill-fit sigmoid parameters
+            elif (section['sigmoid'][0] / L_mean) < 0.01:
+                continue
+
+            else:
+                # Get the bar width from the sigmoid
+                bar_width, bar_height = bh.get_bar_geometry(
+                    section['distance'],
+                    section['sigmoid']
+                )
+
+                # Store data
+                data = {
+                    'bar': bar,
+                    'idx': '{0}_{1}'.format(bar, idx[0]),
+                    'easting': section['location'][0],
+                    'northing': section['location'][1],
+                    'channel_width': int(section['width']),
+                    'bar_width': bar_width,
+                    'bar_height': bar_height
+                }
+
+                # Append to dataframe
+                bar_data_df = bar_data_df.append(
+                    pandas.DataFrame(data=data, index=[n])
+                )
+                n += 1
+
+    # Save the bar data
+    print('Saving Bar Data')
+    bar_data_df.to_csv(OutputRoot + 'bar_data.csv')
+                
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
