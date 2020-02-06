@@ -122,23 +122,26 @@ class BarHandler():
         """
 
         # Find the banks elevations for the direction of the section
-        e0 = section['xsection'][
-                section['xsection']['distance'] == banks[0]
-        ]['demvalue_sm'][0]
+        e0 = section['elev_section'][
+                section['elev_section']['distance'] == banks[0]
+        ]['value_smooth'][0]
         
-        e1 = section['xsection'][
-                section['xsection']['distance'] == banks[1]
-        ]['demvalue_sm'][0]
+        e1 = section['elev_section'][
+                section['elev_section']['distance'] == banks[1]
+        ]['value_smooth'][0]
 
         # e0 -earlier of the two bar points
         # e1 is the latter of the two bar points
         if e1 > e0:
-            section['xsection']['distance'] = np.flip(section['xsection']['distance'], 0)
+            section['elev_section']['distance'] = np.flip(
+                section['elev_section']['distance'], 
+                0
+            )
             banks = (banks[0] * -1, banks[1] * -1)
 
         return section, banks
 
-    def find_maximum_slope(self, section, banks, value='demvalue_sm', step=5):
+    def find_maximum_slope(self, section, banks, value='value_smooth', step=5):
         """
         Finds the index of the maximum slope on the bar side
         Finds the local slopes over some step length
@@ -196,17 +199,17 @@ class BarHandler():
         banks: tuple with the distance positions of the two banks points
         """
         # Find the banks positions in the structure
-        bar_section = section['xsection'][
-            (section['xsection']['distance'] == min(banks))
-            | (section['xsection']['distance'] == max(banks))
+        bar_section = section['elev_section'][
+            (section['elev_section']['distance'] == min(banks))
+            | (section['elev_section']['distance'] == max(banks))
         ]
 
         # Get minimnum elevation on the banks
-        M = min(bar_section['demvalue_sm'])
+        M = min(bar_section['value_smooth'])
 
         # Shift the cross section
-        section['xsection']['demvalue_sm'] = (
-            section['xsection']['demvalue_sm'] - M
+        section['elev_section']['value_smooth'] = (
+            section['elev_section']['value_smooth'] - M
         )
 
         return section
@@ -225,13 +228,13 @@ class BarHandler():
         dydx: the bar's maximum slope
         """
         # Find the banks positions in the structure
-        bar_section = section['xsection'][
-            (section['xsection']['distance'] == min(banks))
-            | (section['xsection']['distance'] == max(banks))
+        bar_section = section['elev_section'][
+            (section['elev_section']['distance'] == min(banks))
+            | (section['elev_section']['distance'] == max(banks))
         ]
 
         # Get maximum elevation on the banks
-        L = max(bar_section['demvalue_sm'])
+        L = max(bar_section['value_smooth'])
 
         # Solve for growth rate, k
         k = (4 * dydx) / L
@@ -273,8 +276,8 @@ class BarHandler():
         one_bank = 0
         for idx in side_test:
             # Get the distances and dem value
-            t = test_bar[idx]['xsection'][dem_col]
-            p = test_bar[idx]['xsection']['distance']
+            t = test_bar[idx]['elev_section'][dem_col]
+            p = test_bar[idx]['elev_section']['distance']
             endpoints = test_bar[idx]['ch_endpoints']
 
             # Find the indexes of the endpoints in the p, t vector
