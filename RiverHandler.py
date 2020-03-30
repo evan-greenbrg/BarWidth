@@ -323,10 +323,9 @@ class RiverHandler():
                 water['value'][minv:maxv] = water['value'][minv:maxv].max()
         
         # 4. Find the dydxs to demarcate width
-        order = 2
         water['diff'] = water['value'].rolling(
                 window=5, center=True
-        ).apply(lambda x: x[1] - x[0])
+        ).apply(lambda x: x.iloc[1] - x.iloc[0])
         
         # 5. Find max and min diff
         max_slopes = water[water['diff'] == water['diff'].max()]['distance']

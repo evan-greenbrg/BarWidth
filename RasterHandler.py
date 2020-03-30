@@ -234,7 +234,6 @@ class RasterHandler():
         try:
             value_0 = dem[row, col]
         except:
-            print('Index out of bounds for axis')
             value_0 = None
 
         types = [
@@ -297,12 +296,10 @@ class RasterHandler():
             try:
                 value_d = dem[row_d][col_d]
             except IndexError:
-                print('Index out of bounds for axis')
                 value_d = None
             try:
                 value_u = dem[row_u][col_u]
             except IndexError:
-                print('Index out of bounds for axis')
                 value_u = None
 
             d_pos = distanced

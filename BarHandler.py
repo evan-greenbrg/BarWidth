@@ -372,7 +372,7 @@ class BarHandler():
 
         return bars
 
-    def get_bar_geometry(self, p, sigmoid, sens=.00015):
+    def get_bar_geometry(self, p, sigmoid, sens=.057):
         """
         From the given sigmoid parameters finds the bar width.
         Uses X% of the asymptote cutoff value to find the width end points
@@ -391,6 +391,8 @@ class BarHandler():
             y = L / (1 + np.exp(-k*(x-x0)))
             return (y)
 
+        # Set up L
+        L = sigmoid[0]
         # Set up x array
         pos_x = np.linspace(
             min(p), 
@@ -414,22 +416,19 @@ class BarHandler():
 
         # Get the top of the clinoform 
         top_df = df.iloc[middle_point[0]:].reset_index(drop=True)
-        top_df['diff'] = top_df['elevation'].diff()
-        top_df = top_df[top_df['diff'] > sens]
-        if len(top_df) > 0:
-            top = top_df[top_df['elevation'] == max(top_df['elevation'])]
-        else:
+        top_df['diff'] = abs(L - top_df['elevation']) / L
+        try:
+            top = top_df[top_df['diff'] <= sens].iloc[0]
+        except:
             top = []
 
         # Get the bottom of the clinoform 
         bot_df = df.iloc[:middle_point[0]].reset_index(drop=True).iloc[::-1]
-        bot_df['diff'] = bot_df['elevation'].diff()
-        bot_df = bot_df[bot_df['diff'] < (-1 * sens)]
-
-        if len(bot_df) > 0:
-            bot = bot_df[bot_df['elevation'] == min(bot_df['elevation'])]
-        else:
-            bot = [] 
+        bot_df['diff'] = abs(0 - bot_df['elevation']) / L
+        try:
+            bot = bot_df[bot_df['diff'] <= sens].iloc[0]
+        except:
+            bot = []
 
         # Calculate geometry
         if len(top) > 0 and len(bot) > 0:

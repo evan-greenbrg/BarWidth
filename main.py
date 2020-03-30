@@ -1,4 +1,7 @@
 import argparse
+import errno
+import json
+import os
 import sys
 
 import gdal
@@ -13,9 +16,24 @@ from RiverHandler import RiverHandler
 from TestHandler import TestHandler
 
 
-def main(DEMpath, esaPath, CenterlinePath, BarPath, CenterlineSmoothing,
-         SectionLength, SectionSmoothing, WidthSens, OutputRoot):
+def main(DEMpath, CenterlinePath, BarPath, esaPath, 
+         CenterlineSmoothing, SectionLength, SectionSmoothing, 
+         WidthSens, OutputRoot):
 
+    # Raise Errors if files don't exists
+    if not os.path.exists(DEMpath):
+        raise FileNotFoundError(
+            errno.ENOENT, os.strerror(errno.ENOENT), DEMpath)
+    if not os.path.exists(CenterlinePath):
+        raise FileNotFoundError(
+            errno.ENOENT, os.strerror(errno.ENOENT), CenterlinePath)
+    if not os.path.exists(BarPath):
+        raise FileNotFoundError(
+            errno.ENOENT, os.strerror(errno.ENOENT), BarPath)
+    if not os.path.exists(esaPath):
+        raise FileNotFoundError(
+            errno.ENOENT, os.strerror(errno.ENOENT), esaPath)
+    
     # Initialize classes, objects, get ProjStr
     riv = RiverHandler()
     rh = RasterHandler()
@@ -34,7 +52,7 @@ def main(DEMpath, esaPath, CenterlinePath, BarPath, CenterlineSmoothing,
         CenterlinePath,
         names=['Longitude', 'Latitude'],
         header=1,
-        index_col=[0]
+#        index_col=[0]
     )
 
     # Smooth the river centerline
@@ -42,6 +60,9 @@ def main(DEMpath, esaPath, CenterlinePath, BarPath, CenterlineSmoothing,
     coordinates['Longitude'], coordinates['Latitude'] = riv.knn_smoothing(
         coordinates, n=CenterlineSmoothing
     )
+#    coordinates['Latitude'], coordinates['Longitude'] = riv.knn_smoothing(
+#        coordinates, n=CenterlineSmoothing
+#    )
 
     # Convert centerline in Lat-Lon to UTM
     print('Converting coordinates to UTM')
@@ -93,6 +114,10 @@ def main(DEMpath, esaPath, CenterlinePath, BarPath, CenterlineSmoothing,
         ds,
         ('easting', 'northing')
     )
+
+    # Downsample if you want
+    step = 3
+    coordinates = coordinates.iloc[::step, :]
 
     if len(coordinates) == 0:
         sys.exit("No coordinates")
@@ -171,14 +196,6 @@ def main(DEMpath, esaPath, CenterlinePath, BarPath, CenterlineSmoothing,
             SectionSmoothing,
         )
         xsections[idx[0]]['elev_section'] = b
-
-#    # Make some test cross-section
-#    print('Generating Test Xsections')
-#    test.save_example_sections(
-#        xsections,
-#        20,
-#        OutputRoot + 'Test/'
-#    )
 
     print('Finding Channel Widths')
     # Set up channel banks dataframe
@@ -260,14 +277,14 @@ def main(DEMpath, esaPath, CenterlinePath, BarPath, CenterlineSmoothing,
         ('downstream_easting', 'downstream_northing')
     )
 
-    # Generate test cross sections
-    print('Generating Test Bar Xsections')
-    test.save_example_bar_sections(
-        coordinates,
-        xsections,
-        bar_df,
-        OutputRoot + 'Test/'
-    )
+#    # Generate test cross sections
+#    print('Generating Test Bar Xsections')
+#    test.save_example_bar_sections(
+#        coordinates,
+#        xsections,
+#        bar_df,
+#        OutputRoot + 'Test/'
+#    )
 
     # Make structure that contains the sections for each bar
     print('Making Bar section structure')
@@ -276,7 +293,7 @@ def main(DEMpath, esaPath, CenterlinePath, BarPath, CenterlineSmoothing,
         sections = bh.get_bar_xsections(
             coordinates,
             xsections,
-            bar_df.iloc[idx]
+            bar_df.iloc[idx - 1]
         )
         bar_sections[str(idx)] = sections
 
@@ -393,6 +410,10 @@ def main(DEMpath, esaPath, CenterlinePath, BarPath, CenterlineSmoothing,
                     section['sigmoid']
                 )
 
+                try: 
+                    water_width = int(section['water_width'])
+                except:
+                    water_width = None
                 # Store data
                 data = {
                     'bar': bar,
@@ -400,7 +421,7 @@ def main(DEMpath, esaPath, CenterlinePath, BarPath, CenterlineSmoothing,
                     'easting': section['location'][0],
                     'northing': section['location'][1],
                     'channel_width_dem': int(section['dem_width']),
-                    'channel_width_water': int(section['water_width']),
+                    'channel_width_water': water_width,
                     'bar_width': bar_width,
                     'bar_height': bar_height
                 }
@@ -426,6 +447,8 @@ if __name__ == "__main__":
                         help='Path to the centerline coordinates file')
     parser.add_argument('BarPath', metavar='b', type=str,
                         help='Path to the bar coordinates file')
+    parser.add_argument('esaPath', metavar='esa', type=str,
+                        help='Path to the esa file')
     parser.add_argument('CenterlineSmoothing', metavar='cs', type=int,
                         help='Smoothing factor for the channel coordinates')
     parser.add_argument('SectionLength', metavar='sl', type=int,
@@ -439,6 +462,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    main(args.DEMpath, args.CenterlinePath, args.BarPath,
+    main(args.DEMpath, args.CenterlinePath, args.BarPath, args.esaPath,
          args.CenterlineSmoothing, args.SectionLength,
          args.SectionSmoothing, args.WidthSens, args.OutputRoot)
