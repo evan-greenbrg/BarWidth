@@ -14,9 +14,9 @@ class TestHandler():
         outpath += fn
         idxs = [random.randint(0, len(xsections)) for i in range(n)]
         for idx in idxs:
-            easting = xsections[idx]['xsection']['easting']
-            northing = xsections[idx]['xsection']['northing']
-            elevation = xsections[idx]['xsection']['demvalue_sm']
+            easting = xsections[idx]['elev_section']['easting']
+            northing = xsections[idx]['elev_section']['northing']
+            elevation = xsections[idx]['elev_section']['value_smooth']
             data = {
                 'easting': easting,
                 'northing': northing,
@@ -48,15 +48,26 @@ class TestHandler():
             print(len(bar_sections))
             i = random.randint(0, len(bar_sections))
             xsection = xsections[i]
-            easting = xsection[3]['easting']
-            northing = xsection[3]['northing']
-            elevation = xsection[3]['demvalue_sm']
+            bar = idx
+            bar_section = i
+            distance = xsection[4]['distance']
+            easting = xsection[4]['easting']
+            northing = xsection[4]['northing']
+            elevation = xsection[4]['value_smooth']
             data = {
+                'bar': [bar for i in easting],
+                'bar_section': [bar_section for i in easting],
+                'distance': distance,
                 'easting': easting,
                 'northing': northing,
                 'elevation': elevation
             }
             df = pandas.DataFrame(data=data)
+            print(outpath.format(
+                datetime.now().strftime('%Y%m%d'),
+                idx
+            ))
+
             df.to_csv(outpath.format(
                 datetime.now().strftime('%Y%m%d'),
                 idx

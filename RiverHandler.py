@@ -86,22 +86,22 @@ class RiverHandler():
         Also includes logic to remove the large negative values at non-existent
         from the raw DEM values
         """
-        demvalue = np.where(section['demvalue'] < 0, None, section['demvalue'])
-        d = {'distance': section['distance'], 'demvalue': demvalue} 
+        value = np.where(section['value'] < 0, None, section['value'])
+        d = {'distance': section['distance'], 'value': value} 
         df = pandas.DataFrame(data=d)
         df = df.fillna(False)
-        demvalues, distance = self.knn_smoothing(df, n=smoothing)
+        values, distance = self.knn_smoothing(df, n=smoothing)
         # For values off the DEM, the value will be less than 0 -> set to False
-        demvalues = [
+        values = [
             False if not x else False if x < 0 else x 
-            for x in demvalues
+            for x in values
         ]
 
         b_dt = np.dtype(
-            section.dtype.descr + [('demvalue_sm', 'f4')]
+            section.dtype.descr + [('value_smooth', 'f4')]
         )
         b = np.zeros(section.shape, dtype=b_dt)
-        b['demvalue_sm'] = demvalues
+        b['value_smooth'] = values
 
         for col in section.dtype.names:
             b[col] = section[col]
@@ -179,7 +179,7 @@ class RiverHandler():
         """
         # Gets the channel geometry
         p = section['distance']
-        t = section['demvalue_sm']
+        t = section['value_smooth']
 
         # Add Step where I Optimize the channel Width
         data = {'distance': p, 'elevation': t}
@@ -281,26 +281,121 @@ class RiverHandler():
             print('No Channel Found')
             return False, None, None
 
-    def get_bank_positions(self, xsection, points):
+    def find_channel_width_surface_water(self, section):
+        """
+	Finds the channel width form the ESA surface watter occurence map
+	Uses a cross-section for the water occurence to find blocks of 
+	water occurence. Picks the most extreme of these (the channel)
+	and finds its width
+	
+	Inputs -
+	section: numpy structure of the elevation and water sections
+
+	Outputs -
+	width: width of the channel in the units of the raster
+	points: distance indices of the channel end points
+	"""
+        dem = pandas.DataFrame(section['elev_section'])
+        water = pandas.DataFrame(section['water_section'])
+        
+        # 1. Shift the water values to the minimum non-zero value
+        minv = min(water['value'][water['value'] > water['value'].median()])
+        min_df = water[water['value'] <= minv]
+        
+        # 2. Find blocks of positive water (closest to the origin)
+        mins_list = list(min_df['distance'][
+            (min_df['distance'] == min(
+                min_df['distance'][min_df['distance'] > 0], key=abs
+            )) 
+            | (min_df['distance'] == min(
+                min_df['distance'][min_df['distance'] < 0], key=abs
+            ))
+        ].index)
+        
+        # 3. Set all the blocks to maximum/median value
+        for i, val in enumerate(mins_list):
+            if i == len(mins_list) - 1:
+                continue
+            else:
+                minv = min(mins_list[i], mins_list[i + 1])
+                maxv = max(mins_list[i], mins_list[i + 1])
+        
+                water['value'][minv:maxv] = water['value'][minv:maxv].max()
+        
+        # 4. Find the dydxs to demarcate width
+        water['diff'] = water['value'].rolling(
+                window=5, center=True
+        ).apply(lambda x: x.iloc[1] - x.iloc[0])
+        
+        # 5. Find max and min diff
+        max_slopes = water[water['diff'] == water['diff'].max()]['distance']
+        min_slopes = water[water['diff'] == water['diff'].min()]['distance']
+
+        max_slope = float(max(max_slopes))
+        min_slope = float(min(min_slopes))
+
+        # 6. Find width
+        width = max(max_slope, min_slope) - min(max_slope, min_slope)
+
+        return width, (min_slope, max_slope)
+
+    def get_bank_positions(self, xsection, dem_points, water_points):
         """
         Takes the points from the channel_widths and turns them into a 
         dataframe to save all of the channel banks for output
-
+        
         Inputs - 
         xsection: Numpy structure of the cross-section
         points: Distance indexes for the channel margins
+        
+        Outputs -
+        Pandas Dataframe: dataframe with easting and northing points of
+        	channel banks
         """
         # Get the data for one side
-        bank0 = xsection[xsection['distance'] == points[0]]
-        data0 = np.append(bank0['easting'], bank0['northing'])
+        dem_bank = xsection[xsection['distance'] == dem_points[0]]
+        dem_loc = [dem_bank['easting'], dem_bank['northing']]
 
+        if not water_points:
+            water_easting = None
+            water_northing = None
+        else:
+            water_bank0 = xsection[xsection['distance'] == water_points[0]]
+            water_easting = water_bank0['easting']
+            water_northing = water_bank0['northing']
+
+        water_loc = [water_easting, water_northing]
+        data0 = np.append(
+            dem_loc,
+            water_loc
+        )
+        
         # Get the data for the other side
-        bank1 = xsection[xsection['distance'] == points[1]]
-        data1 = np.append(bank1['easting'], bank1['northing'])
+        dem_bank = xsection[xsection['distance'] == dem_points[1]]
+        dem_loc = [dem_bank['easting'], dem_bank['northing']]
 
+        if water_points:
+            water_bank1 = xsection[xsection['distance'] == water_points[1]]
+            water_easting = water_bank1['easting']
+            water_northing = water_bank1['northing']
+            water_loc = [water_easting, water_northing]
+
+        data1 = np.append(
+            dem_loc,
+            water_loc
+        )
+        
         data = np.vstack((data0, data1)).astype('float')
-
-        return pandas.DataFrame(data, columns=['easting', 'northing'])
+        
+        return pandas.DataFrame(
+            data, 
+            columns=[
+                'dem_easting', 
+                'dem_northing', 
+                'water_easting', 
+                'water_northing'
+            ]
+        )
     
     def save_channel_widths(self, xsections):
         """
@@ -315,21 +410,24 @@ class RiverHandler():
         width_df: pandas dataframe of the channel widths by position
         """
         # Find the channel bar widths
-        widths = []
+        dem_widths = []
+        water_widths = []
         eastings = []
-
         northings = []
         # Create a width DF
         for section in xsections:
             eastings.append(section[0][0])
             northings.append(section[0][1])
-            widths.append(section[1])
+            dem_widths.append(section[1])
+            water_widths.append(section[2])
 
         # Save as pandas dataframe
-        data = {'easting': eastings, 'northing': northings, 'width': widths}
-        width_df = pandas.DataFrame(
-            data=data,
-            columns=['easting', 'northing', 'width']
-        )
+        data = {
+            'easting': eastings, 
+            'northing': northings, 
+            'dem_width': dem_widths,
+            'water_width': water_widths
+        }
+        width_df = pandas.DataFrame(data=data)
         
         return width_df.reset_index()

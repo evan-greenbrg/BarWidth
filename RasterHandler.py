@@ -40,21 +40,19 @@ class RasterHandler():
 
         return i, j
 
-    def values_from_coordinates(self, ds, dem, coordinates):
+    def value_from_coordinates(self, dem, row, 
+                                xOrigin, yOrigin, pixelWidth, pixelHeight):
         """
         Finds DEM values from set of coordinates
         """
-        xmin, xres, xskew, ymax, yskew, yres = ds.GetGeoTransform()
+        i = np.floor(
+            (yOrigin - row['northing']) / pixelHeight
+        ).astype('int')
+        j = np.floor(
+            (row['easting'] - xOrigin) / pixelWidth
+        ).astype('int')
         # calculate indices and index array
-        indices = self.get_indices(
-            coordinates['easting'].to_numpy(),
-            coordinates['northing'].to_numpy(),
-            xmin,
-            ymax,
-            xres,
-            -yres
-        )
-        return dem[indices]
+        return dem[i, j]
 
     def bounding_coordinates(self, ds):
         """
@@ -160,11 +158,10 @@ class RasterHandler():
 
         return pixelSizeX, pixelSizeY
 
-    def get_dem_pixels(self, east, north, xOrigin, yOrigin,
-                       pixelWidth, pixelHeight):
+    def get_pixels(self, east, north, xOrigin, yOrigin, pixelWidth, pixelHeight):
 
-        dem_col = int((east - xOrigin) / pixelWidth)
-        dem_row = int((yOrigin - north) / pixelHeight)
+        dem_col = np.floor((east - xOrigin) / pixelWidth).astype('int')
+        dem_row = np.floor((yOrigin - north) / pixelHeight).astype('int')
 
         return dem_col, dem_row
 
@@ -223,59 +220,64 @@ class RasterHandler():
 
         return mosaic
 
-    def get_xsection(self, row, dem, xOrigin, yOrigin, pixelWidth,
+    def get_xsection(self, coords, dem, xOrigin, yOrigin, pixelWidth,
                      pixelHeight, xlength, xstep, ystep):
 
-        demcol, demrow = self.get_dem_pixels(
-            row['easting'],
-            row['northing'],
+        col, row = self.get_pixels(
+            coords['easting'],
+            coords['northing'],
             xOrigin,
             yOrigin,
             pixelWidth,
             pixelHeight
         )
+        try:
+            value_0 = dem[row, col]
+        except:
+            value_0 = None
+
         types = [
             ('distance', 'f4'),
             ('easting', 'U10'),
             ('northing', 'U10'),
-            ('demcol', 'i4'),
-            ('demrow', 'i4'),
-            ('demvalue', 'f4'),
+            ('col', 'i4'),
+            ('row', 'i4'),
+            ('value', 'f4'),
         ]
         xsection = np.array(
             tuple([
                 0,
-                row['easting'],
-                row['northing'],
-                demcol,
-                demrow,
-                row['elev_0'],
+                coords['easting'],
+                coords['northing'],
+                col,
+                row,
+                value_0,
             ]),
             dtype=types
         )
         for i in range(1, xlength + 1):
             eastd, northd, distanced = self.get_coords_by_step(
-                row['easting'],
-                row['northing'],
-                row['dlon_inv'],
-                row['dlat_inv'],
+                coords['easting'],
+                coords['northing'],
+                coords['dlon_inv'],
+                coords['dlat_inv'],
                 xstep,
                 ystep,
                 i,
                 sign=1
             )
             eastu, northu, distanceu = self.get_coords_by_step(
-                row['easting'],
-                row['northing'],
-                row['dlon_inv'],
-                row['dlat_inv'],
+                coords['easting'],
+                coords['northing'],
+                coords['dlon_inv'],
+                coords['dlat_inv'],
                 xstep,
                 ystep,
                 i,
                 sign=-1
             )
 
-            demcol_d, demrow_d = self.get_dem_pixels(
+            col_d, row_d = self.get_pixels(
                 eastd,
                 northd,
                 xOrigin,
@@ -283,7 +285,7 @@ class RasterHandler():
                 pixelWidth,
                 pixelHeight
             )
-            demcol_u, demrow_u = self.get_dem_pixels(
+            col_u, row_u = self.get_pixels(
                 eastu,
                 northu,
                 xOrigin,
@@ -292,24 +294,22 @@ class RasterHandler():
                 pixelHeight
             )
             try:
-                value_d = dem[demrow_d][demcol_d]
+                value_d = dem[row_d][col_d]
             except IndexError:
-                print('Index out of bounds for axis')
                 value_d = None
             try:
-                value_u = dem[demrow_u][demcol_u]
+                value_u = dem[row_u][col_u]
             except IndexError:
-                print('Index out of bounds for axis')
                 value_u = None
 
             d_pos = distanced
             u_pos = distanceu
             dlist = np.array(
-                tuple([d_pos, eastd, northd, demcol_d, demrow_d, value_d]),
+                tuple([d_pos, eastd, northd, col_d, row_d, value_d]),
                 dtype=xsection.dtype
             )
             ulist = np.array(
-                tuple([u_pos, eastu, northu, demcol_u, demrow_u, value_u]),
+                tuple([u_pos, eastu, northu, col_u, row_u, value_u]),
                 dtype=xsection.dtype
             )
 
