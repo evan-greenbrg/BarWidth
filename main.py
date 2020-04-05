@@ -13,7 +13,6 @@ from pyproj import Proj
 from BarHandler import BarHandler
 from RasterHandler import RasterHandler
 from RiverHandler import RiverHandler
-from TestHandler import TestHandler
 
 
 def main(DEMpath, CenterlinePath, BarPath, esaPath, 
@@ -37,7 +36,6 @@ def main(DEMpath, CenterlinePath, BarPath, esaPath,
     # Initialize classes, objects, get ProjStr
     riv = RiverHandler()
     rh = RasterHandler()
-    test = TestHandler()
     ds = gdal.Open(DEMpath, 0)
     water_ds = gdal.Open(esaPath, 0)
     ProjStr = "epsg:{0}".format(
@@ -276,15 +274,6 @@ def main(DEMpath, CenterlinePath, BarPath, esaPath,
         ds, 
         ('downstream_easting', 'downstream_northing')
     )
-
-#    # Generate test cross sections
-#    print('Generating Test Bar Xsections')
-#    test.save_example_bar_sections(
-#        coordinates,
-#        xsections,
-#        bar_df,
-#        OutputRoot + 'Test/'
-#    )
 
     # Make structure that contains the sections for each bar
     print('Making Bar section structure')
