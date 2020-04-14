@@ -35,7 +35,8 @@ def posterior_distribution(X, y, N):
 
 
 bars_f = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Output_Data/bar_average_data.csv'
-all_f = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Output_Data/total_data.csv'
+all_f = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Output_Data/sampled_total_data.csv'
+# all_f = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Output_Data/total_data.csv'
 bar_df = pandas.read_csv(bars_f)
 ms_df = pandas.read_csv(all_f)
 
@@ -114,11 +115,13 @@ outpath = (
 )
 vh.data_figure(
     outpath,
-    ms_df,
+    group_river,
     group_bar,
     bar_intercept,
     bar_coefs,
     ms_intercept,
-    ms_coefs
+    ms_coefs,
+    median_size=5,
+    alpha=0.25,
+    density_size=35
 )
-
