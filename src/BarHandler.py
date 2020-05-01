@@ -438,7 +438,7 @@ class BarHandler():
 
         return width, height
 
-    def fit_sigmoid(self, section, distance, value):
+    def fit_sigmoid(self, section, banks):
         """
         Fits the sigmoid to the bar
         section: numpy structure of the channel cross-section
@@ -446,26 +446,46 @@ class BarHandler():
         value: name of the value column to use in the section struct
         """
 
-        def sigmoid(x, L ,x0, k):
-            y = L / (1 + np.exp(-k*(x-x0)))
+        def sigmoid(x, L ,x0, k, s):
+            y = L / (1 + np.exp(-k*(x-x0))) + s
             return (y)
         
-        section = section[section[value] > 0]
+        bar_section = section['elev_section'][
+            (
+                section['elev_section']['distance'] 
+                >= section['elev_section']['distance'][
+                    section['elev_section']['distance'] == min(banks)
+                ]
+            )
+            & (
+                section['elev_section']['distance'] 
+                <= section['elev_section']['distance'][
+                    section['elev_section']['distance'] == max(banks)
+                ]
+            )
+        ]
         
         p0 = [
-            max(section[value]), 
-            np.median(section[distance]),
-            1,
-            min(section[value])
+            max(bar_section['value_smooth']), 
+            np.median(bar_section['distance']),
+            -.09,
+            1
         ] 
         popt, pcov = curve_fit(
         	sigmoid, 
-        	section[distance], 
-        	section[value], 
+        	bar_section['distance'], 
+        	bar_section['value_smooth'], 
         	p0, 
         	method='dogbox', 
         	maxfev=100000,
         )
+        print(popt)
+        y = sigmoid(bar_section['distance'], popt[0], popt[1], popt[2], popt[3])
+
+        plt.plot(section['elev_section']['distance'], section['elev_section']['value_smooth'])
+        plt.plot(bar_section['distance'], bar_section['value_smooth'])
+        plt.plot(bar_section['distance'], y)
+        plt.show()
         
         return popt
 

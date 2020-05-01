@@ -8,7 +8,7 @@ import pymc3 as pm
 
 from Visualizer import Visualizer
 
-def posterior_distribution(X, y, N):
+def posterior_distribution(X, y, N, fit_intercept=True):
     reg = LinearRegression().fit(X.values.reshape(-1, 1), y.values)
     # Set up
     with pm.Model() as model:
@@ -22,8 +22,10 @@ def posterior_distribution(X, y, N):
         sigma = pm.HalfNormal('sigma', sd=25)
 
         # Estimate of Mean
-#        mean = slope * X.values
-        mean = intercept + slope * X.values
+        if not fit_intercept:
+            mean = slope * X.values
+        else:
+            mean = intercept + slope * X.values
 
         # Observed Values
         Y_obs = pm.Normal('Y_obs', mu=mean, sd=sigma, observed=y.values)
@@ -91,15 +93,16 @@ ybar = {
     'mean': bar_df.loc[:, 'mean_width'],
 }
 
+fit_intercept = False
 # ms df trace
 trace_ms = {}
 for key, value in yms.items():
-    trace_ms[key] = posterior_distribution(Xms, value, 3000)
+    trace_ms[key] = posterior_distribution(Xms, value, 3000, fit_intercept)
 
 # bar df trace
 trace_bar = {}
 for key, value in ybar.items():
-    trace_bar[key] = posterior_distribution(Xbar, value, 3000)
+    trace_bar[key] = posterior_distribution(Xbar, value, 3000, fit_intercept)
 
 # Coef estimation
 ms_coefs = {}
@@ -184,5 +187,5 @@ vh.data_figure_v3(
     alpha=0.25,
     density_size=35,
     fmt='svg',
-    bar_intercept=bar_intercept
+#    bar_intercept=bar_intercept
 )

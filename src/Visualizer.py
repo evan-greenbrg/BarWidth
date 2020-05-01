@@ -850,13 +850,6 @@ class Visualizer():
         ]
         j = 0
         for idx, row in lit_df.iterrows():
-            ax[0].scatter(
-                row['Bar Width'],
-                row['Channel Width'], 
-                marker='^',
-                c=colors[j],
-                label=row['River']
-            )
             ax[1].scatter(
                 row['Bar Width'],
                 row['Channel Width'], 

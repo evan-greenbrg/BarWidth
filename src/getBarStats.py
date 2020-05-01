@@ -12,15 +12,22 @@ import osr
 import numpy as np
 import pandas
 from pyproj import Proj
+from matplotlib import pyplot as plt
 
 from BarHandler import BarHandler
 from RasterHandler import RasterHandler
 
 
 MIN_RSQUARE = 0.6
-BAR_PARAM_FN = 'bar_parameters.csv'
-BAR_DATA_FN = 'bar_data.csv'
-RSQUARE_FN = 'rsquared_dataframe.csv'
+BAR_PARAM_FN = 'bar_parameters_fit_test.csv'
+BAR_DATA_FN = 'bar_data_fit_test.csv'
+RSQUARE_FN = 'rsquared_dataframe_fit_test.csv'
+
+
+def sigmoid(x, L ,x0, k):
+    y = L / (1 + np.exp(-k*(x-x0)))
+    return (y)
+
 
 def main():
     parser = argparse.ArgumentParser(description='template file resolver')
@@ -172,6 +179,8 @@ def main():
                     banks
                 )
 
+#                popt = bh.fit_sigmoid(section, banks)
+                # Commented out to test other methods of finding sigmoid
                 # Find the minimum and shift the cross-section
                 section = bh.shift_cross_section_down(section, banks)
 

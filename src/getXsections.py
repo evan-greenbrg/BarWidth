@@ -1,8 +1,12 @@
 import argparse
 import errno
-import json
 import os
 import sys
+from yaml import load
+try:
+    from yaml import CLoader as Loader
+except ImportError:
+    from yaml import Loader
 
 import gdal
 import osr
@@ -10,34 +14,40 @@ import numpy as np
 import pandas
 from pyproj import Proj
 
-from BarHandler import BarHandler
 from RasterHandler import RasterHandler
 from RiverHandler import RiverHandler
 
 
-def main(DEMpath, CenterlinePath, BarPath, esaPath, 
-         CenterlineSmoothing, SectionLength, SectionSmoothing, 
-         WidthSens, OutputRoot):
+def main():
+
+    parser = argparse.ArgumentParser(description='Input Prams for Xsection')
+    parser.add_argument('param', type=argparse.FileType('r'))
+    args = parser.parse_args()
+    param = load(args.param, Loader=Loader)
 
     # Raise Errors if files don't exists
-    if not os.path.exists(DEMpath):
+    if not os.path.exists(param['DEMpath']):
         raise FileNotFoundError(
-            errno.ENOENT, os.strerror(errno.ENOENT), DEMpath)
-    if not os.path.exists(CenterlinePath):
+            errno.ENOENT, os.strerror(errno.ENOENT),
+            param['DEMpath']
+        )
+    if not os.path.exists(param['CenterlinePath']):
         raise FileNotFoundError(
-            errno.ENOENT, os.strerror(errno.ENOENT), CenterlinePath)
-    if not os.path.exists(BarPath):
+            errno.ENOENT, os.strerror(errno.ENOENT),
+            param['CenterlinePath']
+        )
+    if not os.path.exists(param['esaPath']):
         raise FileNotFoundError(
-            errno.ENOENT, os.strerror(errno.ENOENT), BarPath)
-    if not os.path.exists(esaPath):
-        raise FileNotFoundError(
-            errno.ENOENT, os.strerror(errno.ENOENT), esaPath)
+            errno.ENOENT,
+            os.strerror(errno.ENOENT),
+            param['esaPath']
+        )
 
     # Initialize classes, objects, get ProjStr
     riv = RiverHandler()
     rh = RasterHandler()
-    ds = gdal.Open(DEMpath, 0)
-    water_ds = gdal.Open(esaPath, 0)
+    ds = gdal.Open(param['DEMpath'], 0)
+    water_ds = gdal.Open(param['esaPath'], 0)
     ProjStr = "epsg:{0}".format(
         osr.SpatialReference(
             wkt=ds.GetProjection()
@@ -47,20 +57,17 @@ def main(DEMpath, CenterlinePath, BarPath, esaPath,
     # Load the Centerline Coordinates File
     print('Loading the Centerline File')
     coordinates = pandas.read_csv(
-        CenterlinePath,
+        param['CenterlinePath'],
         names=['Longitude', 'Latitude'],
         header=1,
-#        index_col=[0]
     )
 
     # Smooth the river centerline
     print('Smoothing the river centerline')
     coordinates['Longitude'], coordinates['Latitude'] = riv.knn_smoothing(
-        coordinates, n=CenterlineSmoothing
+        coordinates,
+        n=param['CenterlineSmoothing']
     )
-#    coordinates['Latitude'], coordinates['Longitude'] = riv.knn_smoothing(
-#        coordinates, n=CenterlineSmoothing
-#    )
 
     # Convert centerline in Lat-Lon to UTM
     print('Converting coordinates to UTM')
@@ -90,7 +97,7 @@ def main(DEMpath, CenterlinePath, BarPath, esaPath,
         'pixelHeight': -transform[5]
     }
     dem_transform['xstep'], dem_transform['ystep'] = rh.get_pixel_size(
-        DEMpath
+        param['DEMpath']
     )
 
     # Loading Water Surface data and metadata
@@ -103,12 +110,12 @@ def main(DEMpath, CenterlinePath, BarPath, esaPath,
         'pixelHeight': -transform[5]
     }
     water_transform['xstep'], water_transform['ystep'] = rh.get_pixel_size(
-        DEMpath
+        param['DEMpath']
     )
 
     # Find what portion of centerline is within the DEM
     coordinates = rh.coordinates_in_dem(
-        coordinates, 
+        coordinates,
         ds,
         ('easting', 'northing')
     )
@@ -119,7 +126,7 @@ def main(DEMpath, CenterlinePath, BarPath, esaPath,
 
     if len(coordinates) == 0:
         sys.exit("No coordinates")
-        
+
     # Find the channel direction and inverse channel direction
     print('Finding channel and cross-section directions')
     coordinates = riv.get_direction(coordinates)
@@ -127,7 +134,7 @@ def main(DEMpath, CenterlinePath, BarPath, esaPath,
     coordinates = coordinates.dropna(axis=0, how='any')
 
     # Save the Coordinates file
-    coordinates.to_csv(OutputRoot + 'coordinates.csv')
+    coordinates.to_csv(param['OutputRoot'] + 'coordinates.csv')
 
     # Build the cross-section structure
     print('Building channel cross sections')
@@ -157,7 +164,7 @@ def main(DEMpath, CenterlinePath, BarPath, esaPath,
                         dem_transform['yOrigin'],
                         dem_transform['pixelWidth'],
                         dem_transform['pixelHeight'],
-                        SectionLength,
+                        param['SectionLength'],
                         dem_transform['xstep'],
                         dem_transform['ystep']
                     ),
@@ -168,7 +175,7 @@ def main(DEMpath, CenterlinePath, BarPath, esaPath,
                         water_transform['yOrigin'],
                         water_transform['pixelWidth'],
                         water_transform['pixelHeight'],
-                        SectionLength,
+                        param['SectionLength'],
                         water_transform['xstep'],
                         water_transform['ystep']
                     )
@@ -178,12 +185,6 @@ def main(DEMpath, CenterlinePath, BarPath, esaPath,
         )
         xsections = np.append(xsections, section)
 
-    # Load in the Bar coordinate data
-    bh = BarHandler(
-        xsections[0]['coords'][0],
-        xsections[0]['coords'][1]
-    )
-
     # Smooth Cross Sections
     print('Smoothing Cross-Sections')
     for idx, section in np.ndenumerate(xsections):
@@ -191,7 +192,7 @@ def main(DEMpath, CenterlinePath, BarPath, esaPath,
         b = riv.xsection_smoothing(
             idx,
             section['elev_section'],
-            SectionSmoothing,
+            param['SectionSmoothing'],
         )
         xsections[idx[0]]['elev_section'] = b
 
@@ -199,19 +200,19 @@ def main(DEMpath, CenterlinePath, BarPath, esaPath,
     # Set up channel banks dataframe
     bank_df = pandas.DataFrame(
         columns=[
-            'dem_easting', 
-	    'dem_northing',
-	    'water_easting',
-	    'water_northing'
-	]
+            'dem_easting',
+            'dem_northing',
+            'water_easting',
+            'water_northing'
+        ]
     )
 
     # Iterate through exsections to find widths
     for idx, section in np.ndenumerate(xsections):
         # Finds the channel width and associated points
         banks, dem_width, dem_points = riv.find_channel_width(
-            xsections[idx[0]]['elev_section'], 
-            order=WidthSens
+            xsections[idx[0]]['elev_section'],
+            order=param['WidthSens']
         )
         if len(
             xsections[idx[0]]['water_section'][
@@ -228,9 +229,9 @@ def main(DEMpath, CenterlinePath, BarPath, esaPath,
         # If the program found channel banks will construct banks dataframe
         if banks:
             bank_df = bank_df.append(riv.get_bank_positions(
-                xsections[idx[0]]['elev_section'], 
+                xsections[idx[0]]['elev_section'],
                 dem_points,
-		water_points
+                water_points
             ))
 
         # Save width values to the major cross-section structure
@@ -240,44 +241,20 @@ def main(DEMpath, CenterlinePath, BarPath, esaPath,
 
     # Save the Channel Cross Sections Structure
     print('Saving Cross-Section Structure')
-    np.save(OutputRoot + 'xsections.npy', xsections)
+    np.save(param['OutputRoot'] + 'xsections.npy', xsections)
 
     if len(bank_df) > 0:
         print('Saving Channel Banks')
-        bank_df.to_csv(OutputRoot + 'channel_banks.csv')
+        bank_df.to_csv(param['OutputRoot'] + 'channel_banks.csv')
 
     # Save the width dataframe
     print('Saving Width DataFrame')
-    riv.save_channel_widths(xsections).to_csv(OutputRoot + 'width_dataframe.csv')
+    riv.save_channel_widths(xsections).to_csv(
+        param['OutputRoot'] + 'width_dataframe.csv'
+    )
 
     return True
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description='Return Channel Width and Bar Width Measurements'
-    )
-    parser.add_argument('DEMpath', metavar='dem', type=str,
-                        help='Path to the DEM file')
-    parser.add_argument('CenterlinePath', metavar='c', type=str,
-                        help='Path to the centerline coordinates file')
-    parser.add_argument('BarPath', metavar='b', type=str,
-                        help='Path to the bar coordinates file')
-    parser.add_argument('esaPath', metavar='esa', type=str,
-                        help='Path to the esa file')
-    parser.add_argument('CenterlineSmoothing', metavar='cs', type=int,
-                        help='Smoothing factor for the channel coordinates')
-    parser.add_argument('SectionLength', metavar='sl', type=int,
-                        help='Length of the cross section to take')
-    parser.add_argument('SectionSmoothing', metavar='ss', type=int,
-                        help='Smoothing factor for the cross-sections')
-    parser.add_argument('WidthSens', metavar='ws', type=int,
-                        help='Sensitivity of the channel width measurement')
-    parser.add_argument('OutputRoot', metavar='out', type=str,
-                        help='Root for the file outputs')
-
-    args = parser.parse_args()
-
-    main(args.DEMpath, args.CenterlinePath, args.BarPath, args.esaPath,
-         args.CenterlineSmoothing, args.SectionLength,
-         args.SectionSmoothing, args.WidthSens, args.OutputRoot)
+    main()

@@ -1,5 +1,6 @@
 import os
 import json
+from itertools import product
 
 import pandas
 import cv2
@@ -11,6 +12,7 @@ import rasterio
 from rasterio.mask import mask
 from osgeo import gdal
 from fiona.crs import from_epsg
+from matplotlib import pyplot as plt
 
 
 def bounding_coordinates(ds):
@@ -84,39 +86,80 @@ def get_centerline(B3, B6, size):
     return delineate.getBiggestCenterline(nms, size)
 
 
-DemPath = '/Volumes/EGG-HD/PhD Documents/Projects/Bar_Width/White_River_IN/WhiteRiverDEM_32616.tif'
+def get_tiles(path, n):
+    with rasterio.open(path) as inds:
+        # Get shape of image array 
+        ncols = inds.meta['width']
+        nrows = inds.meta['height']
 
-B3path = '/Volumes/EGG-HD/PhD Documents/Projects/Bar_Width/White_River_IN/LC08_L1TP_021033_20191110_20191115_01_T1_B3.tiff'
-B6path = '/Volumes/EGG-HD/PhD Documents/Projects/Bar_Width/White_River_IN/LC08_L1TP_021033_20191110_20191115_01_T1_B6.tiff'
+        # Get width and height
+        width = ncols//n
+        height = nrows//n
 
-B3out = '/Volumes/EGG-HD/PhD Documents/Projects/Bar_Width/White_River_IN/LC08_L1TP_021033_20191110_20191115_01_T1_B3_clip.tif'
-B6out = '/Volumes/EGG-HD/PhD Documents/Projects/Bar_Width/White_River_IN/LC08_L1TP_021033_20191110_20191115_01_T1_B6_clip.tif'
-epsg = 32616
+        offsets = product(
+            range(0, ncols, width), 
+            range(0, nrows, height)
+        )
+
+        big_window = rasterio.windows.Window(
+            col_off=0, 
+            row_off=0, 
+            width=ncols, 
+            height=nrows
+        )
+
+        for col_off, row_off in  offsets:
+            window = rasterio.windows.Window(
+                col_off=col_off, 
+                row_off=row_off, 
+                width=width, 
+                height=height
+            ).intersection(big_window)
+
+            transform = rasterio.windows.transform(window, inds.transform)
+
+            yield window, transform
+
+DemPath = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon/YukonDEM_3995.tif'
+
+B3path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon/Landsat/YukonB3_3995.tif'
+B6path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon/Landsat/YukonB6_3995.tif'
+
+B3out = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon/Landsat/YukonB3_3995_clip.tif'
+B6out = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon/Landsat/YukonB6_3995_clip.tif'
+epsg = 3995
 
 # Clip the Raster
 clip_raster(B3path, DemPath, epsg, B3out)
 clip_raster(B6path, DemPath, epsg, B6out)
 
-
 # Find the centerline
-ds = gdal.Open(B3out)
-B3 = numpy.array(ds.GetRasterBand(1).ReadAsArray())
-ds = gdal.Open(B6out)
-B6 = numpy.array(ds.GetRasterBand(1).ReadAsArray())
+srcB3 = rasterio.open(B3out)
+srcB6 = rasterio.open(B6out)
 
 print('Finding Centerline')
-centerline = get_centerline(B3, B6, 200)
-
-print('Finding Coordinates')
-raster_ds = rasterio.open(B3out)
 coordinates = []
-for pair in numpy.transpose(numpy.nonzero(centerline)):
-    coordinates.append(
-        rasterio.transform.xy(raster_ds.transform, pair[0], pair[1])
-    )
+for window, transform in get_tiles(B3out, 2):
 
-oroot = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Input_Data/White_river'
-f = 'white_river_water_points.csv'
+    print(window)
+    print(transform)
+
+    winB3 = srcB3.read(1, window=window)
+    winB6 = srcB6.read(1, window=window)
+
+    if (winB3.shape[0] < 10) | (winB3.shape[1] < 10):
+        continue
+
+    else:
+        centerline = get_centerline(winB3, winB6, 200)
+
+        for pair in numpy.transpose(numpy.nonzero(centerline)):
+            coordinates.append(
+                rasterio.transform.xy(transform, pair[0], pair[1])
+            )
+
+oroot = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon'
+f = 'yukon_water_points.csv'
 outpath = os.path.join(oroot, f)
 
 coordinate_df = pandas.DataFrame(coordinates, columns=['lon', 'lat'])
@@ -128,11 +171,12 @@ from RasterHandler import RasterHandler
 
 
 rh = RasterHandler()
-centerline_path = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Input_Data/White_river/white_river_centerline_32616.csv'
+centerline_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon/yukon_centerline_3995.csv'
 
-iepsg = 32616
-oepsg = 4326
+iepsg = 3995 
+oepsg = 4269 
 df = pandas.read_csv(centerline_path)
+df = df.iloc[::5, :]
 lon = []
 lat = []
 for i, row in df.iterrows():
@@ -143,5 +187,5 @@ for i, row in df.iterrows():
 df['lon_'] = lon
 df['lat_'] = lat
 
-out_path = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Input_Data/White_river/white_river_centerline_4326.csv'
+out_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon/yukon_centerline_4269.csv'
 df.to_csv(out_path)
