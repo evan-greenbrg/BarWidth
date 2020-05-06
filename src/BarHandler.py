@@ -189,7 +189,7 @@ class BarHandler():
 
         return section[max_idx[0]]['distance'], dydx 
 
-    def shift_cross_section_down(self, section, banks):
+    def shift_cross_section_down(self, section, banks, depth):
         """
         Shifts the cross section down to the minimum channel position
         This makes it easy to fit the sigmoid
@@ -205,11 +205,12 @@ class BarHandler():
         ]
 
         # Get minimnum elevation on the banks
-        M = min(bar_section['value_smooth'])
+        minimum = min(bar_section['value_smooth'])
+        shift = minimum - depth
 
         # Shift the cross section
         section['elev_section']['value_smooth'] = (
-            section['elev_section']['value_smooth'] - M
+            section['elev_section']['value_smooth'] - shift
         )
 
         return section
@@ -227,6 +228,7 @@ class BarHandler():
         x0: the distance position where the maximum slope is
         dydx: the bar's maximum slope
         """
+
         # Find the banks positions in the structure
         bar_section = section['elev_section'][
             (section['elev_section']['distance'] == min(banks))
@@ -234,7 +236,7 @@ class BarHandler():
         ]
 
         # Get maximum elevation on the banks
-        L = max(bar_section['value_smooth'])
+        L = max(section['elev_section']['value_smooth'])
 
         # Solve for growth rate, k
         k = (4 * dydx) / L

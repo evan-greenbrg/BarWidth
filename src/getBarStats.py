@@ -182,7 +182,11 @@ def main():
 #                popt = bh.fit_sigmoid(section, banks)
                 # Commented out to test other methods of finding sigmoid
                 # Find the minimum and shift the cross-section
-                section = bh.shift_cross_section_down(section, banks)
+                section = bh.shift_cross_section_down(
+                   section, 
+                   banks, 
+                   input_param.get('depth', 0)
+                )
 
                 # Fit sigmoid parameters
                 popt = bh.fit_sigmoid_parameters(section, banks, x0, dydx)
