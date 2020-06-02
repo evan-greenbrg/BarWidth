@@ -23,6 +23,10 @@ BAR_PARAM_FN = 'bar_parameters.csv'
 BAR_DATA_FN = 'bar_data.csv'
 RSQUARE_FN = 'rsquared_dataframe.csv'
 
+test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/barParams.yaml'
+with open(test_path, "r") as f:
+    input_param = load(f, Loader=Loader)
+
 
 def sigmoid(x, L ,x0, k):
     y = L / (1 + np.exp(-k*(x-x0)))
@@ -167,6 +171,11 @@ def main():
                 )
                 filtered += 1
             else:
+                # interpolate profile down
+                depth = bh.interpolate_down(
+                    input_param.get('depth'),
+                )
+
                 # Find the side of the channel with the bar
                 banks = bh.find_bar_side(section['bank'])
 
@@ -179,11 +188,6 @@ def main():
                     banks
                 )
 
-                # Get shift value
-                depth = bh.draw_shift(
-                    input_param.get('depth'),
-                    input_param.get('cv')
-                )
                 print('Depth')
                 print(depth)
 

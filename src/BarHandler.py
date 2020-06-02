@@ -546,7 +546,7 @@ class BarHandler():
         return 1 - (ss_res / ss_tot)
 
 
-    def draw_shift(self, depth, cv):
+    def interpolate_down(self, depth, cv):
         """
         Draw the shifted channel depth from a lognormal distribution.
         The inputs are the depth of the channel from gauge and a 
