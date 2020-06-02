@@ -18,6 +18,9 @@ from RasterHandler import RasterHandler
 from RiverHandler import RiverHandler
 
 
+STEP = None
+
+
 def main():
 
     parser = argparse.ArgumentParser(description='Input Prams for Xsection')
@@ -121,8 +124,8 @@ def main():
     )
 
     # Downsample if you want
-    step = 3
-    coordinates = coordinates.iloc[::step, :]
+    if STEP:
+        coordinates = coordinates.iloc[::STEP, :]
 
     if len(coordinates) == 0:
         sys.exit("No coordinates")

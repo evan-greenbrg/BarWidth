@@ -846,7 +846,7 @@ class Visualizer():
             'coral',
             'violet',
             'violet',
-            'orange'
+            'orange',
         ]
         j = 0
         for idx, row in lit_df.iterrows():

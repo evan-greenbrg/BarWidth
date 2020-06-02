@@ -18,10 +18,10 @@ from BarHandler import BarHandler
 from RasterHandler import RasterHandler
 
 
-MIN_RSQUARE = 0.6
-BAR_PARAM_FN = 'bar_parameters_fit_test.csv'
-BAR_DATA_FN = 'bar_data_fit_test.csv'
-RSQUARE_FN = 'rsquared_dataframe_fit_test.csv'
+MIN_RSQUARE = .5
+BAR_PARAM_FN = 'bar_parameters.csv'
+BAR_DATA_FN = 'bar_data.csv'
+RSQUARE_FN = 'rsquared_dataframe.csv'
 
 
 def sigmoid(x, L ,x0, k):
@@ -179,13 +179,19 @@ def main():
                     banks
                 )
 
-#                popt = bh.fit_sigmoid(section, banks)
-                # Commented out to test other methods of finding sigmoid
+                # Get shift value
+                depth = bh.draw_shift(
+                    input_param.get('depth'),
+                    input_param.get('cv')
+                )
+                print('Depth')
+                print(depth)
+
                 # Find the minimum and shift the cross-section
                 section = bh.shift_cross_section_down(
                    section, 
                    banks, 
-                   input_param.get('depth', 0)
+                   depth
                 )
 
                 # Fit sigmoid parameters
@@ -193,6 +199,9 @@ def main():
 
                 # Get the R-Squared
                 rsquared = bh.get_r_squared(section, banks, popt)
+                print('Rsquared')
+                print(rsquared)
+                print('\n')
 
                 # Filter based on R-squared value
                 if (rsquared < MIN_RSQUARE) or (popt[2] < 0):

@@ -36,14 +36,14 @@ def posterior_distribution(X, y, N, fit_intercept=True):
         # Posterior distribution
         return pm.sample(N, step)
 
-
-bars_f = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/sampled_bar_average_data_filt.csv'
-all_f = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/total_data_filt.csv'
+# bars_f = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/all_bar_data.csv'
+bars_f = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/sampled_bar_average_data.csv'
+all_f = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/total_data.csv'
 lit_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Lit_values.csv'
 bar_df = pandas.read_csv(bars_f)
 ms_df = pandas.read_csv(all_f)
 
-platte_df = bar_df[bar_df.river=='Platte River']
+# platte_df = bar_df[bar_df.river=='Platte River']
 # Get Rid of Platte
 bar_df = bar_df[bar_df.river!='Platte River']
 ms_df = ms_df[ms_df.river!='Platte River']
@@ -147,12 +147,12 @@ outpath = (
 
 # Literature
 lit_df = pandas.read_csv(lit_path)
-platte_data = {
-    'River': 'Platte River',
-    'Channel Width': platte_df['channel_width_mean'].mean(),
-    'Bar Width': platte_df['bar_width'].mean()
-}
-lit_df = lit_df.append(pandas.DataFrame(platte_data, index=[9]))
+# platte_data = {
+#     'River': 'Platte River',
+#     'Channel Width': platte_df['channel_width_mean'].mean(),
+#     'Bar Width': platte_df['bar_width'].mean()
+# }
+# lit_df = lit_df.append(pandas.DataFrame(platte_data, index=[9]))
 #vh.data_figure(
 #    outpath,
 #    group_river,

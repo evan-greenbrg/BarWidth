@@ -1,10 +1,12 @@
 import statistics
+import math
 
 import numpy as np
 import pandas
 from pyproj import Proj
 from scipy import spatial 
 from scipy.optimize import curve_fit
+from scipy import stats
 
 from matplotlib import pyplot as plt
 
@@ -205,8 +207,10 @@ class BarHandler():
         ]
 
         # Get minimnum elevation on the banks
+        maximum = max(bar_section['value_smooth'])
         minimum = min(bar_section['value_smooth'])
-        shift = minimum - depth
+        height = maximum - minimum
+        shift = minimum - (depth - height)
 
         # Shift the cross section
         section['elev_section']['value_smooth'] = (
@@ -506,6 +510,16 @@ class BarHandler():
             (section['elev_section']['distance'] >= min(banks))
             & (section['elev_section']['distance'] <= max(banks))
         ]
+
+        # Filter to slope
+        minimum = min(bar_section['value_smooth'])
+        cutoff = minimum + (0.1 * minimum)
+        bar_section = bar_section[bar_section['value_smooth'] > cutoff]
+
+        if len(bar_section) == 0:
+            return 0
+
+
         # Get the x, y, f vectors
         x = bar_section['distance']
         y = bar_section['value_smooth']
@@ -517,11 +531,33 @@ class BarHandler():
         # SStot
         ss_tot = sum([(y[i] - ymean)**2 for i in range(0, len(x))])
 
+#        plt.plot(
+#            section['elev_section']['distance'],
+#            section['elev_section']['value_smooth']
+#        )
+#        plt.plot(
+#            bar_section['distance'],
+#            bar_section['value_smooth']
+#        )
+#        plt.plot(x, f)
+#        plt.show()
+
         # Return R-squared
         return 1 - (ss_res / ss_tot)
 
 
-        
+    def draw_shift(self, depth, cv):
+        """
+        Draw the shifted channel depth from a lognormal distribution.
+        The inputs are the depth of the channel from gauge and a 
+        coefficient of variation.
+        """
+        if not depth or not cv:
+            return 0
 
+        s = cv * depth 
+        scale = math.exp(depth)
 
-
+        return math.log(
+            stats.lognorm.rvs(s, loc=depth, scale=scale, size=1)[0]
+        )
