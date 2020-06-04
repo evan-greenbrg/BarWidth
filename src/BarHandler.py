@@ -207,14 +207,11 @@ class BarHandler():
         ]
 
         # Get minimnum elevation on the banks
-        maximum = max(bar_section['value_smooth'])
         minimum = min(bar_section['value_smooth'])
-        height = maximum - minimum
-        shift = minimum - (depth - height)
 
         # Shift the cross section
         section['elev_section']['value_smooth'] = (
-            section['elev_section']['value_smooth'] - shift
+            section['elev_section']['value_smooth'] - minimum
         )
 
         return section
@@ -511,14 +508,10 @@ class BarHandler():
             & (section['elev_section']['distance'] <= max(banks))
         ]
 
-        # Filter to slope
-        minimum = min(bar_section['value_smooth'])
-        cutoff = minimum + (0.1 * minimum)
-        bar_section = bar_section[bar_section['value_smooth'] > cutoff]
 
+        # If there is no bar section -> exit
         if len(bar_section) == 0:
             return 0
-
 
         # Get the x, y, f vectors
         x = bar_section['distance']
@@ -545,19 +538,94 @@ class BarHandler():
         # Return R-squared
         return 1 - (ss_res / ss_tot)
 
-
-    def interpolate_down(self, depth, cv):
+    def interpolate_down(self, depth, section, banks):
         """
         Draw the shifted channel depth from a lognormal distribution.
         The inputs are the depth of the channel from gauge and a 
         coefficient of variation.
         """
-        if not depth or not cv:
+        if not depth:
             return 0
 
-        s = cv * depth 
-        scale = math.exp(depth)
+        elev = section['elev_section']
 
-        return math.log(
-            stats.lognorm.rvs(s, loc=depth, scale=scale, size=1)[0]
+        banks_idx = [
+            i 
+            for i, val 
+            in enumerate(elev['distance'])
+            if (val == banks[0]) or (val == banks[1])
+        ]
+        channel_top = float(max(elev['value_smooth'][[banks_idx]]))
+
+        # Find all of the slopes on the bar bank
+        ydiffs = np.diff(elev['value_smooth'])
+
+        # Find max and minimum slope
+        maxi = [
+            i 
+            for i, val 
+            in enumerate(ydiffs)
+            if (val == max(ydiffs))
+        ][0]
+
+        if maxi < 10:
+            maxslope = ydiffs[maxi]
+        else:
+            maxslope = np.mean(ydiffs[maxi-10:maxi+10])
+
+        mini = [
+            i 
+            for i, val 
+            in enumerate(ydiffs)
+            if (val == min(ydiffs))
+        ][0]
+
+        if mini < 10:
+            minslope = ydiffs[mini]
+        else:
+            minslope = np.mean(ydiffs[mini-10:mini+10])
+
+        # Create a new interpreted elevations array
+        interp_elev = elev
+
+        # Decend each bank - Max
+        interp_depth = 0
+        channel_bot = elev['value_smooth'][maxi]
+        i = maxi
+        m = 1
+        while (
+            interp_depth < depth 
+            and abs(i) < len(interp_elev['value_smooth']) - 1
+        ):
+            interp_depth = channel_top - channel_bot
+            i -= 1
+            channel_bot = channel_bot - (m * maxslope)
+            interp_elev['value_smooth'][i] = channel_bot
+
+        interp_maxi = i
+        channel_bot_max = channel_bot
+
+        # Decend each bank - Min
+        interp_depth = 0
+        channel_bot = elev['value'][mini]
+        i = mini
+        m = 1
+        while (
+            interp_depth < depth
+            and abs(i) < len(interp_elev['value_smooth']) - 1
+        ):
+            interp_depth = channel_top - channel_bot
+            i += 1
+            channel_bot = channel_bot + (m * minslope)
+            interp_elev['value_smooth'][i] = channel_bot
+
+        interp_mini = i
+        channel_bot_min = channel_bot
+
+        # Set the value between the two edges
+        interp_elev['value_smooth'][interp_mini:interp_maxi] = min(
+            [channel_bot_max, channel_bot_min]
         )
+        section['elev_section']['value_smooth'] = interp_elev['value_smooth']
+
+        return section

@@ -801,13 +801,14 @@ class Visualizer():
         )
 
         # Plot the data
-        bar_colors = ['b', 'g', 'r', 'orange', 'm']
+        bar_colors = ['b', 'g', 'r', 'orange', 'm', 'yellow']
         ms_cmaps = [
             'Blues', 
             'Greens', 
             'Reds', 
             'Oranges', 
             'Purples',
+            'Blues'
         ]
         i = 0
         for name, group in group_bar:
