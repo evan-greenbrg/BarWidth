@@ -2,6 +2,7 @@ import glob
 import os
 import json
 
+from shapely import geometry
 from osgeo import gdal
 import ogr
 import osr
@@ -10,8 +11,6 @@ import pandas
 import numpy as np
 from rasterio.mask import mask
 from rasterio.merge import merge
-from shapely import geometry
-from shapely.geometry import box
 import geopandas as gpd
 from fiona.crs import from_epsg
 import pycrs
@@ -109,7 +108,7 @@ class RasterHandler():
         dataEPSG = int(data_srs.GetAttrValue('AUTHORITY', 1))
 
         minx0, miny0, maxx0, maxy0 = self.bounding_coordinates(dsdem)
-        bbox = box(minx0, miny0, maxx0, maxy0)
+        bbox = geometry.box(minx0, miny0, maxx0, maxy0)
         geo = gpd.GeoDataFrame(
             {'geometry': bbox},
             index=[0],
@@ -330,15 +329,16 @@ class RasterHandler():
         minx, miny, maxx, maxy = self.bounding_coordinates(ds)
 
         # Create Geopandas bounding geometry from bounding coordinates
-        bbox = box(minx, miny, maxx, maxy)
+        bbox = geometry.box(minx, miny, maxx, maxy)
         crs = {'init': 'epsg:{}'.format(EPSG)}
-        spoly = gpd.GeoSeries([bbox],crs=crs)
+        spoly = gpd.GeoSeries([bbox], crs=crs)
 
         # Convert coordinate points into spatial points
         xcol, ycol = xy
         dem_coordinates = pandas.DataFrame(columns=coordinates.columns)
         for idx, row in coordinates.iterrows():
             point = geometry.Point((row[xcol], row[ycol]))
+            print(point)
             if point.within(spoly.geometry.iloc[0]):
                 dem_coordinates = dem_coordinates.append(row)
 

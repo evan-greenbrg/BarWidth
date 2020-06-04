@@ -18,6 +18,14 @@ from RasterHandler import RasterHandler
 from RiverHandler import RiverHandler
 
 
+STEP = None
+
+test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Niabrara/sectionParams.yaml'
+with open(test_path, "r") as f:
+    param = load(f, Loader=Loader)
+
+param['SectionSmoothing'] = 15
+
 def main():
 
     parser = argparse.ArgumentParser(description='Input Prams for Xsection')
@@ -114,15 +122,15 @@ def main():
     )
 
     # Find what portion of centerline is within the DEM
-    coordinates = rh.coordinates_in_dem(
-        coordinates,
-        ds,
-        ('easting', 'northing')
-    )
+#    coordinates = rh.coordinates_in_dem(
+#        coordinates,
+#        ds,
+#        ('easting', 'northing')
+#    )
 
     # Downsample if you want
-    step = 3
-    coordinates = coordinates.iloc[::step, :]
+    if STEP:
+        coordinates = coordinates.iloc[::STEP, :]
 
     if len(coordinates) == 0:
         sys.exit("No coordinates")

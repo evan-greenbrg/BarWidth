@@ -120,32 +120,36 @@ def get_tiles(path, n):
 
             yield window, transform
 
-DemPath = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon/YukonDEM_3995.tif'
+DemPath = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Niabrara/output.tin.tif'
 
-B3path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon/Landsat/YukonB3_3995.tif'
-B6path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon/Landsat/YukonB6_3995.tif'
+B3path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Niabrara/lansat.'
+B6path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi_Leclair/lansat/LC08_L1TP_023039_20200416_20200423_01_T1_B6.TIF'
 
-B3out = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon/Landsat/YukonB3_3995_clip.tif'
-B6out = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon/Landsat/YukonB6_3995_clip.tif'
-epsg = 3995
+B3out = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Niabrara/lansat/niabrara_b3_clip.tif'
+B6out = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Niabrara/lansat/niabrara_b6_clip.tif'
+epsg = 29614
 
 # Clip the Raster
-clip_raster(B3path, DemPath, epsg, B3out)
-clip_raster(B6path, DemPath, epsg, B6out)
+# clip_raster(B3path, DemPath, epsg, B3out)
+# clip_raster(B6path, DemPath, epsg, B6out)
 
 # Find the centerline
 srcB3 = rasterio.open(B3out)
 srcB6 = rasterio.open(B6out)
 
+B3 = srcB3.read(1)
+B6 = srcB6.read(1)
+centerline = get_centerline(B3, B6, 200)
+
 print('Finding Centerline')
 coordinates = []
-for window, transform in get_tiles(B3out, 2):
+for window, transform in get_tiles(B3out, 1):
 
     print(window)
     print(transform)
 
-    winB3 = srcB3.read(1, window=window)
-    winB6 = srcB6.read(1, window=window)
+    winB3 = srcB3.read(1)
+    winB6 = srcB6.read(1)
 
     if (winB3.shape[0] < 10) | (winB3.shape[1] < 10):
         continue
@@ -158,8 +162,8 @@ for window, transform in get_tiles(B3out, 2):
                 rasterio.transform.xy(transform, pair[0], pair[1])
             )
 
-oroot = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon'
-f = 'yukon_water_points.csv'
+oroot = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Niabrara'
+f = 'niabrara_water_points.csv'
 outpath = os.path.join(oroot, f)
 
 coordinate_df = pandas.DataFrame(coordinates, columns=['lon', 'lat'])
@@ -171,10 +175,10 @@ from RasterHandler import RasterHandler
 
 
 rh = RasterHandler()
-centerline_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon/yukon_centerline_3995.csv'
+centerline_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Niabrara/niabrara_centerline.csv'
 
-iepsg = 3995 
-oepsg = 4269 
+iepsg = 26915
+oepsg = 4326 
 df = pandas.read_csv(centerline_path)
 df = df.iloc[::5, :]
 lon = []
@@ -187,5 +191,5 @@ for i, row in df.iterrows():
 df['lon_'] = lon
 df['lat_'] = lat
 
-out_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Yukon/yukon_centerline_4269.csv'
+out_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Niabrara/niabrara_centerline_4326.csv'
 df.to_csv(out_path)

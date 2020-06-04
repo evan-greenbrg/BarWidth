@@ -297,10 +297,17 @@ class RiverHandler():
 	"""
         dem = pandas.DataFrame(section['elev_section'])
         water = pandas.DataFrame(section['water_section'])
-        
+
         # 1. Shift the water values to the minimum non-zero value
-        minv = min(water['value'][water['value'] > water['value'].median()])
+        if water['value'].max() == water['value'].median():
+            minv = 0.1
+        else:
+            minv = min(water['value'][water['value'] > water['value'].median()])
+
         min_df = water[water['value'] <= minv]
+        
+        if len(min_df) == 0 or min_df['value'].max() == 0:
+            return None, None
         
         # 2. Find blocks of positive water (closest to the origin)
         mins_list = list(min_df['distance'][

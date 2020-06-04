@@ -1,10 +1,12 @@
 import statistics
+import math
 
 import numpy as np
 import pandas
 from pyproj import Proj
 from scipy import spatial 
 from scipy.optimize import curve_fit
+from scipy import stats
 
 from matplotlib import pyplot as plt
 
@@ -189,7 +191,7 @@ class BarHandler():
 
         return section[max_idx[0]]['distance'], dydx 
 
-    def shift_cross_section_down(self, section, banks):
+    def shift_cross_section_down(self, section, banks, depth):
         """
         Shifts the cross section down to the minimum channel position
         This makes it easy to fit the sigmoid
@@ -205,11 +207,11 @@ class BarHandler():
         ]
 
         # Get minimnum elevation on the banks
-        M = min(bar_section['value_smooth'])
+        minimum = min(bar_section['value_smooth'])
 
         # Shift the cross section
         section['elev_section']['value_smooth'] = (
-            section['elev_section']['value_smooth'] - M
+            section['elev_section']['value_smooth'] - minimum
         )
 
         return section
@@ -227,6 +229,7 @@ class BarHandler():
         x0: the distance position where the maximum slope is
         dydx: the bar's maximum slope
         """
+
         # Find the banks positions in the structure
         bar_section = section['elev_section'][
             (section['elev_section']['distance'] == min(banks))
@@ -234,7 +237,7 @@ class BarHandler():
         ]
 
         # Get maximum elevation on the banks
-        L = max(bar_section['value_smooth'])
+        L = max(section['elev_section']['value_smooth'])
 
         # Solve for growth rate, k
         k = (4 * dydx) / L
@@ -504,6 +507,12 @@ class BarHandler():
             (section['elev_section']['distance'] >= min(banks))
             & (section['elev_section']['distance'] <= max(banks))
         ]
+
+
+        # If there is no bar section -> exit
+        if len(bar_section) == 0:
+            return 0
+
         # Get the x, y, f vectors
         x = bar_section['distance']
         y = bar_section['value_smooth']
@@ -515,11 +524,108 @@ class BarHandler():
         # SStot
         ss_tot = sum([(y[i] - ymean)**2 for i in range(0, len(x))])
 
+#        plt.plot(
+#            section['elev_section']['distance'],
+#            section['elev_section']['value_smooth']
+#        )
+#        plt.plot(
+#            bar_section['distance'],
+#            bar_section['value_smooth']
+#        )
+#        plt.plot(x, f)
+#        plt.show()
+
         # Return R-squared
         return 1 - (ss_res / ss_tot)
 
+    def interpolate_down(self, depth, section, banks):
+        """
+        Draw the shifted channel depth from a lognormal distribution.
+        The inputs are the depth of the channel from gauge and a 
+        coefficient of variation.
+        """
+        if not depth:
+            return 0
 
-        
+        elev = section['elev_section']
 
+        banks_idx = [
+            i 
+            for i, val 
+            in enumerate(elev['distance'])
+            if (val == banks[0]) or (val == banks[1])
+        ]
+        channel_top = float(max(elev['value_smooth'][[banks_idx]]))
 
+        # Find all of the slopes on the bar bank
+        ydiffs = np.diff(elev['value_smooth'])
 
+        # Find max and minimum slope
+        maxi = [
+            i 
+            for i, val 
+            in enumerate(ydiffs)
+            if (val == max(ydiffs))
+        ][0]
+
+        if maxi < 10:
+            maxslope = ydiffs[maxi]
+        else:
+            maxslope = np.mean(ydiffs[maxi-10:maxi+10])
+
+        mini = [
+            i 
+            for i, val 
+            in enumerate(ydiffs)
+            if (val == min(ydiffs))
+        ][0]
+
+        if mini < 10:
+            minslope = ydiffs[mini]
+        else:
+            minslope = np.mean(ydiffs[mini-10:mini+10])
+
+        # Create a new interpreted elevations array
+        interp_elev = elev
+
+        # Decend each bank - Max
+        interp_depth = 0
+        channel_bot = elev['value_smooth'][maxi]
+        i = maxi
+        m = 1
+        while (
+            interp_depth < depth 
+            and abs(i) < len(interp_elev['value_smooth']) - 1
+        ):
+            interp_depth = channel_top - channel_bot
+            i -= 1
+            channel_bot = channel_bot - (m * maxslope)
+            interp_elev['value_smooth'][i] = channel_bot
+
+        interp_maxi = i
+        channel_bot_max = channel_bot
+
+        # Decend each bank - Min
+        interp_depth = 0
+        channel_bot = elev['value'][mini]
+        i = mini
+        m = 1
+        while (
+            interp_depth < depth
+            and abs(i) < len(interp_elev['value_smooth']) - 1
+        ):
+            interp_depth = channel_top - channel_bot
+            i += 1
+            channel_bot = channel_bot + (m * minslope)
+            interp_elev['value_smooth'][i] = channel_bot
+
+        interp_mini = i
+        channel_bot_min = channel_bot
+
+        # Set the value between the two edges
+        interp_elev['value_smooth'][interp_mini:interp_maxi] = min(
+            [channel_bot_max, channel_bot_min]
+        )
+        section['elev_section']['value_smooth'] = interp_elev['value_smooth']
+
+        return section

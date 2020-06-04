@@ -18,10 +18,14 @@ from BarHandler import BarHandler
 from RasterHandler import RasterHandler
 
 
-MIN_RSQUARE = 0.6
-BAR_PARAM_FN = 'bar_parameters_fit_test.csv'
-BAR_DATA_FN = 'bar_data_fit_test.csv'
-RSQUARE_FN = 'rsquared_dataframe_fit_test.csv'
+MIN_RSQUARE = .05
+BAR_PARAM_FN = 'bar_parameters.csv'
+BAR_DATA_FN = 'bar_data.csv'
+RSQUARE_FN = 'rsquared_dataframe.csv'
+
+test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Niabrara/barParams.yaml'
+with open(test_path, "r") as f:
+    input_param = load(f, Loader=Loader)
 
 
 def sigmoid(x, L ,x0, k):
@@ -81,17 +85,17 @@ def main():
     bar_df = bh.convert_bar_to_utm(myProj, bar_df)
 
     # Find the bar coords within the DEM
-    print('Find Bars within the DEM')
-    bar_df = rh.coordinates_in_dem(
-        bar_df,
-        ds,
-        ('upstream_easting', 'upstream_northing')
-    )
-    bar_df = rh.coordinates_in_dem(
-        bar_df,
-        ds,
-        ('downstream_easting', 'downstream_northing')
-    )
+#    print('Find Bars within the DEM')
+#    bar_df = rh.coordinates_in_dem(
+#        bar_df,
+#        ds,
+#        ('upstream_easting', 'upstream_northing')
+#    )
+#    bar_df = rh.coordinates_in_dem(
+#        bar_df,
+#        ds,
+#        ('downstream_easting', 'downstream_northing')
+#    )
     ds = None
 
     # Make structure that contains the sections for each bar
@@ -167,6 +171,7 @@ def main():
                 )
                 filtered += 1
             else:
+
                 # Find the side of the channel with the bar
                 banks = bh.find_bar_side(section['bank'])
 
@@ -179,16 +184,38 @@ def main():
                     banks
                 )
 
-#                popt = bh.fit_sigmoid(section, banks)
-                # Commented out to test other methods of finding sigmoid
+                # interpolate profile down
+                section = bh.interpolate_down(
+                    input_param.get('depth'),
+                    section,
+                    banks
+                )
+
                 # Find the minimum and shift the cross-section
-                section = bh.shift_cross_section_down(section, banks)
+                section = bh.shift_cross_section_down(
+                    section, 
+                    banks, 
+                    input_param.get('depth')
+                )
 
                 # Fit sigmoid parameters
                 popt = bh.fit_sigmoid_parameters(section, banks, x0, dydx)
 
                 # Get the R-Squared
                 rsquared = bh.get_r_squared(section, banks, popt)
+                print('Rsquared')
+                print(rsquared)
+                print('\n')
+
+
+#                x = section['elev_section']['distance']
+#                y = sigmoid(x, *popt)
+#                plt.plot(
+#                    section['elev_section']['distance'],
+#                    section['elev_section']['value_smooth']
+#                )
+#                plt.plot(x, y)
+#                plt.show()
 
                 # Filter based on R-squared value
                 if (rsquared < MIN_RSQUARE) or (popt[2] < 0):
