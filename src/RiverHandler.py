@@ -11,8 +11,10 @@ from scipy.signal import argrelextrema
 from scipy.ndimage import label as ndlabel
 from scipy.ndimage import sum as ndsum
 from scipy import spatial 
+from matplotlib import pyplot as plt
 
 from RasterHandler import RasterHandler
+from PointPicker import WidthPicker
 
 
 class RiverHandler():
@@ -281,6 +283,40 @@ class RiverHandler():
             print('No Channel Found')
             return False, None, None
 
+    def mannual_find_channel_width(self, idx, section):
+        # Set the X and Y
+        p = section['distance']
+        t = section['value_smooth']
+
+        if max(t) == 0:
+            return False, None, None
+
+        # Pick positive bank
+        fig = plt.figure()
+        one = plt.scatter(p, t)
+        plt.title('{}: Pick positive Banks First'.format(idx))
+        PP = WidthPicker(plt.gca())
+        fig.canvas.mpl_connect('pick_event', PP)
+        one.set_picker(3)
+        plt.show()
+
+        print(PP.mouseX)
+        print(PP.mouseY)
+
+        banks = [x for x in PP.mouseX]
+        banks = [(banks[0], banks[1]), (banks[2], banks[3])]
+        points = (max(PP.mouseX), min(PP.mouseX))
+
+        if points[0] < 0 or points[1] < 0:
+            width = abs(points[0]) + abs(points[1])
+        else:
+            if points[0] > points[1]:
+                width = points[0] - points[1]
+            else:
+                width = points[1] - points[0]
+
+        return banks, width, points
+
     def find_channel_width_surface_water(self, section):
         """
 	Finds the channel width form the ESA surface watter occurence map
@@ -359,15 +395,39 @@ class RiverHandler():
         Pandas Dataframe: dataframe with easting and northing points of
         	channel banks
         """
+        def closest(lst, K): 
+            return lst[min(range(len(lst)), key = lambda i: abs(lst[i]-K))] 
+
+        # Find all of the 
+        dem0_closest = closest(xsection['distance'], dem_points[0])
+        dem1_closest = closest(xsection['distance'], dem_points[1])
+
+        if water_points:
+            water0_closest = closest(xsection['distance'], water_points[0])
+            water1_closest = closest(xsection['distance'], water_points[1])
+
         # Get the data for one side
-        dem_bank = xsection[xsection['distance'] == dem_points[0]]
+        dem_bank = xsection[
+            xsection['distance'] == dem0_closest 
+        ]
         dem_loc = [dem_bank['easting'], dem_bank['northing']]
+
+        if len(dem_bank) == 0:
+            return pandas.DataFrame(
+                {
+                    'dem_easting': None, 
+                    'dem_northing': None, 
+                    'water_easting': None, 
+                    'water_northing': None
+                }, index=[0])
 
         if not water_points:
             water_easting = None
             water_northing = None
         else:
-            water_bank0 = xsection[xsection['distance'] == water_points[0]]
+            water_bank0 = xsection[
+                xsection['distance'] == water0_closest
+            ]
             water_easting = water_bank0['easting']
             water_northing = water_bank0['northing']
 
@@ -378,11 +438,15 @@ class RiverHandler():
         )
         
         # Get the data for the other side
-        dem_bank = xsection[xsection['distance'] == dem_points[1]]
+        dem_bank = xsection[
+            xsection['distance'] == dem1_closest
+        ]
         dem_loc = [dem_bank['easting'], dem_bank['northing']]
 
         if water_points:
-            water_bank1 = xsection[xsection['distance'] == water_points[1]]
+            water_bank1 = xsection[
+                xsection['distance'] == water1_closest
+            ]
             water_easting = water_bank1['easting']
             water_northing = water_bank1['northing']
             water_loc = [water_easting, water_northing]

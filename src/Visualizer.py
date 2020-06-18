@@ -750,7 +750,7 @@ class Visualizer():
         width50 = 0
         # Mean Width
         # Median Bars
-        ax[0].plot(
+        ax[0].loglog(
             xs,
             Ymean5_bar,
             linewidth=width,
@@ -758,7 +758,7 @@ class Visualizer():
             linestyle=line_style,
             zorder=2
         )
-        ax[0].plot(
+        ax[0].loglog(
             xs,
             Ymean50_bar,
             linewidth=width50,
@@ -766,7 +766,7 @@ class Visualizer():
             linestyle=line50,
             zorder=2
         )
-        ax[0].plot(
+        ax[0].loglog(
             xs,
             Ymean95_bar,
             linewidth=width,
@@ -775,7 +775,7 @@ class Visualizer():
             zorder=2
         )
         # Reach 
-        ax[1].plot(
+        ax[1].loglog(
             xs,
             Ymean5_bar,
             linewidth=width,
@@ -783,7 +783,7 @@ class Visualizer():
             linestyle=line_style,
             zorder=2
         )
-        ax[1].plot(
+        ax[1].loglog(
             xs,
             Ymean50_bar,
             linewidth=width50,
@@ -791,7 +791,7 @@ class Visualizer():
             linestyle=line50,
             zorder=2
         )
-        ax[1].plot(
+        ax[1].loglog(
             xs,
             Ymean95_bar,
             linewidth=width,
@@ -801,18 +801,33 @@ class Visualizer():
         )
 
         # Plot the data
-        bar_colors = ['b', 'g', 'r', 'orange', 'm', 'yellow']
+        bar_colors = [
+            'b', 
+            'g', 
+            'r', 
+            'orange', 
+            'm', 
+            'yellow', 
+            'brown', 
+            'White', 
+            'pink',
+            'lime'
+        ]
         ms_cmaps = [
             'Blues', 
             'Greens', 
             'Reds', 
             'Oranges', 
             'Purples',
-            'Blues'
+            'Blues',
+            'Yellows',
+            'Grays',
+            'PuBu',
+            'YlOrRd'
         ]
         i = 0
         for name, group in group_bar:
-            ax[0].plot(
+            ax[0].loglog(
                 group['bar_width'], 
                 group['mean_width'], 
                 marker='o', 
@@ -823,7 +838,7 @@ class Visualizer():
                 label=name,
                 color=bar_colors[i]
             )
-            ax[1].plot(
+            ax[1].loglog(
                 group['bar_width'].median(),
                 group['mean_width'].median(),
                 marker='o', 
@@ -848,10 +863,11 @@ class Visualizer():
             'violet',
             'violet',
             'orange',
+            'lime'
         ]
         j = 0
         for idx, row in lit_df.iterrows():
-            ax[1].scatter(
+            ax[1].loglog(
                 row['Bar Width'],
                 row['Channel Width'], 
                 marker='^',
@@ -859,6 +875,28 @@ class Visualizer():
                 label=row['River']
             ) 
             j += 1
+
+        # Validation Data
+        my_val = (43, 93)
+        swartz_val = (42.5, 127)
+        ax[1].loglog(
+            my_val[0], 
+            my_val[1],
+            marker='8',
+            markerfacecolor='gold',
+            markeredgecolor='black',
+            markeredgewidth=1.5
+        )
+        ax[1].loglog(
+            swartz_val[0], 
+            swartz_val[1],
+            marker='8',
+            markerfacecolor='red',
+            markeredgecolor='black',
+            markeredgewidth=1.5
+        )
+
+
           
         #  Subplot titles
         ax[0].title.set_text('Bar Averages')

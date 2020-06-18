@@ -13,18 +13,22 @@ import osr
 import numpy as np
 import pandas
 from pyproj import Proj
+from matplotlib import pyplot as plt
 
 from RasterHandler import RasterHandler
 from RiverHandler import RiverHandler
+from PointPicker import WidthPicker
 
 
-STEP = None
+STEP = 2
 
-test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Niabrara/sectionParams.yaml'
+test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX/sectionParams.yaml'
 with open(test_path, "r") as f:
     param = load(f, Loader=Loader)
 
 param['SectionSmoothing'] = 15
+param['manual'] = True
+param['step'] = 1
 
 def main():
 
@@ -216,19 +220,27 @@ def main():
     )
 
     # Iterate through exsections to find widths
-    for idx, section in np.ndenumerate(xsections):
+    for idx in range(0, len(xsections), param['step']):
         # Finds the channel width and associated points
-        banks, dem_width, dem_points = riv.find_channel_width(
-            xsections[idx[0]]['elev_section'],
-            order=param['WidthSens']
-        )
+        if param['manual']:
+            banks, dem_width, dem_points = riv.mannual_find_channel_width(
+                idx,
+                xsections[idx]['elev_section']
+            )
+            plt.close('all')
+        else:
+            banks, dem_width, dem_points = riv.find_channel_width(
+                xsections[idx]['elev_section'],
+                xsections[idx]['elev_section'],
+                order=param['WidthSens']
+            )
         if len(
-            xsections[idx[0]]['water_section'][
-                xsections[idx[0]]['water_section']['value'] > 0
+            xsections[idx]['water_section'][
+                xsections[idx]['water_section']['value'] > 0
             ]
         ) > 0:
             water_width, water_points = riv.find_channel_width_surface_water(
-                xsections[idx[0]]
+                xsections[idx]
             )
         else:
             water_width = None
@@ -237,15 +249,25 @@ def main():
         # If the program found channel banks will construct banks dataframe
         if banks:
             bank_df = bank_df.append(riv.get_bank_positions(
-                xsections[idx[0]]['elev_section'],
+                xsections[idx]['elev_section'],
                 dem_points,
                 water_points
             ))
 
         # Save width values to the major cross-section structure
-        xsections[idx[0]]['bank'] = banks
-        xsections[idx[0]]['dem_width'] = dem_width
-        xsections[idx[0]]['water_width'] = water_width
+        xsections[idx]['bank'] = banks
+        xsections[idx]['dem_width'] = dem_width
+        xsections[idx]['water_width'] = water_width
+
+        # If there is a step, fill the rest of the values
+        if param['step'] > 1:
+            if idx != len(xsections) - 1:
+                for j in range(param['step'] -1):
+                    if idx + j > len(xsections) - 1:
+                        break
+                    xsections[idx + j]['bank'] = banks
+                    xsections[idx + j]['dem_width'] = dem_width
+                    xsections[idx + j]['water_width'] = water_width
 
     # Save the Channel Cross Sections Structure
     print('Saving Cross-Section Structure')
