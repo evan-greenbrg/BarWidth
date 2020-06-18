@@ -18,15 +18,17 @@ from BarHandler import BarHandler
 from RasterHandler import RasterHandler
 
 
-MIN_RSQUARE = .05
+MIN_RSQUARE = 0.05
 BAR_PARAM_FN = 'bar_parameters.csv'
 BAR_DATA_FN = 'bar_data.csv'
 RSQUARE_FN = 'rsquared_dataframe.csv'
 
-test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Niabrara/barParams.yaml'
+test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX/barParams.yaml'
 with open(test_path, "r") as f:
     input_param = load(f, Loader=Loader)
 
+input_param['interpolate'] = True
+input_param['mannual'] = True
 
 def sigmoid(x, L ,x0, k):
     y = L / (1 + np.exp(-k*(x-x0)))
@@ -105,8 +107,9 @@ def main():
         sections = bh.get_bar_xsections(
             coordinates,
             xsections,
-            bar_df.iloc[idx - 1]
+            bar_df.iloc[idx]
         )
+        print(len(sections))
         bar_sections[str(idx)] = sections
 
     # Save the parameters
@@ -171,51 +174,47 @@ def main():
                 )
                 filtered += 1
             else:
-
-                # Find the side of the channel with the bar
-                banks = bh.find_bar_side(section['bank'])
-
-                # Flip cross-sections so they are all facing the same way
-                section, banks = bh.flip_bars(section, banks)
-
-                # Find the distance for maximum slope and the maximum slope
-                x0, dydx = bh.find_maximum_slope(
-                    section['elev_section'],
-                    banks
-                )
-
                 # interpolate profile down
-                section = bh.interpolate_down(
-                    input_param.get('depth'),
-                    section,
-                    banks
-                )
+                if input_param['interpolate'] == True:
+                    section = bh.interpolate_down(
+                        input_param.get('depth'),
+                        section
+                    )
 
                 # Find the minimum and shift the cross-section
                 section = bh.shift_cross_section_down(
                     section, 
-                    banks, 
-                    input_param.get('depth')
                 )
 
-                # Fit sigmoid parameters
-                popt = bh.fit_sigmoid_parameters(section, banks, x0, dydx)
+                if input_param['mannual']:
+                    popt, rsquared = bh.mannual_fit_bar(section)
 
-                # Get the R-Squared
-                rsquared = bh.get_r_squared(section, banks, popt)
-                print('Rsquared')
-                print(rsquared)
-                print('\n')
+                else:
+                    # Find the side of the channel with the bar
+                    banks = bh.find_bar_side(section['bank'])
 
+                    # Flip cross-sections so they are all facing the same way
+                    section, banks = bh.flip_bars(section, banks)
 
-#                x = section['elev_section']['distance']
-#                y = sigmoid(x, *popt)
-#                plt.plot(
-#                    section['elev_section']['distance'],
-#                    section['elev_section']['value_smooth']
-#                )
-#                plt.plot(x, y)
-#                plt.show()
+                    # Find the distance for maximum slope and the maximum slope
+                    x0, dydx = bh.find_maximum_slope(
+                        section['elev_section'],
+                        banks
+                    )
+
+                    # Fit sigmoid parameters
+                    popt = bh.fit_sigmoid_parameters(
+                        section, 
+                        banks, 
+                        x0, 
+                        dydx
+                    )
+
+                    # Get the R-Squared
+                    rsquared = bh.get_r_squared(section, banks, popt)
+                    print('Rsquared')
+                    print(rsquared)
+                    print('\n')
 
                 # Filter based on R-squared value
                 if (rsquared < MIN_RSQUARE) or (popt[2] < 0):

@@ -43,13 +43,17 @@ lit_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Lit_values.csv'
 bar_df = pandas.read_csv(bars_f)
 ms_df = pandas.read_csv(all_f)
 
-# platte_df = bar_df[bar_df.river=='Platte River']
 # Get Rid of Platte
 bar_df = bar_df[bar_df.river!='Platte River']
 ms_df = ms_df[ms_df.river!='Platte River']
 
-# bar_df = bar_df[bar_df.river!='Red River']
-# ms_df = ms_df[ms_df.river!='Red River']
+# Get rid of tombigbee
+# bar_df = bar_df[bar_df.river!='Tombigbee River']
+# ms_df = ms_df[ms_df.river!='Tombigbee River']
+
+# Get rid of Mississippi Leclair
+bar_df = bar_df[bar_df.river!='Mississippi River - Leclair']
+ms_df = ms_df[ms_df.river!='Mississippi River - Leclair']
 
 # Clean
 bar_df = bar_df[[
