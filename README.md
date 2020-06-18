@@ -1,5 +1,5 @@
 # River widths and Bar widths
-### An automated method to find the widths of river channels and the widths of channel-bar clinoforms.
+### A method to find the widths of river channels and the widths of channel-bar clinoforms.
 
 ### General Workflow
 Feed the program:  
