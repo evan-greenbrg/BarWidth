@@ -20,9 +20,9 @@ from RiverHandler import RiverHandler
 from PointPicker import WidthPicker
 
 
-STEP = 2
+STEP = 3
 
-test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX/sectionParams.yaml'
+test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi_Leclair/sectionParams.yaml'
 with open(test_path, "r") as f:
     param = load(f, Loader=Loader)
 

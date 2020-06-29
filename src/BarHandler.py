@@ -7,6 +7,7 @@ from pyproj import Proj
 from scipy import spatial 
 from scipy.optimize import curve_fit
 from scipy import stats
+from scipy.spatial.distance import cdist
 from matplotlib import pyplot as plt
 from matplotlib.widgets import Button
 
@@ -383,7 +384,7 @@ class BarHandler():
 
         return bars
 
-    def get_bar_geometry(self, p, sigmoid, sens=.157):
+    def get_bar_geometry(self, p, sigmoid, sens=.057):
         """
         From the given sigmoid parameters finds the bar width.
         Uses X% of the asymptote cutoff value to find the width end points
@@ -423,19 +424,19 @@ class BarHandler():
 
         # Get the top of the clinoform 
         top_df = df.iloc[middle_point[0]:].reset_index(drop=True)
-        top_df['diff'] = abs(L - top_df['elevation']) / L
-        try:
+        top_df['diff'] = abs((L - top_df['elevation']) / L)
+        if max(top_df['diff']) > 0.98:
+            top = top_df[top_df['diff'] >= (1 - sens)].iloc[0]
+        else:
             top = top_df[top_df['diff'] <= sens].iloc[0]
-        except:
-            top = []
 
         # Get the bottom of the clinoform 
         bot_df = df.iloc[:middle_point[0]].reset_index(drop=True).iloc[::-1]
-        bot_df['diff'] = abs(0 - bot_df['elevation']) / L
-        try:
+        bot_df['diff'] = abs(L - bot_df['elevation']) / L
+        if max(bot_df['diff']) > 0.98:
+            bot = bot_df[bot_df['diff'] >= (1 - sens)].iloc[0]
+        else:
             bot = bot_df[bot_df['diff'] <= sens].iloc[0]
-        except:
-            bot = []
 
         # Calculate geometry
         if len(top) > 0 and len(bot) > 0:
@@ -577,14 +578,16 @@ class BarHandler():
         interp_channel = np.copy(channel)
 
         # Decend each bank - Max
+        interpolate = True
         interp_depth = 0
         channel_bot = interp_channel['value_smooth'][maxi]
         i = maxi
         m = abs(interp_channel['distance'][1] - interp_channel['distance'][0])
-        interpolate = True
+        data = {'i': [], 'bot': [], 'dist': []}
         # Need to handle if the depth is greater than the expected
         if channel_top - channel_bot > depth:
             interpolate = False
+            max_df = pandas.DataFrame(data)
             pass
         else:
             while (
@@ -596,19 +599,22 @@ class BarHandler():
                 channel_bot = channel_bot - (m * maxslope)
                 if channel_top - channel_bot > depth:
                     channel_bot = channel_top - depth
-                interp_channel['value_smooth'][i] = channel_bot
+#                interp_channel['value_smooth'][i] = channel_bot
+                data['i'].append(i)
+                data['dist'].append(interp_channel['distance'][i])
+                data['bot'].append(channel_bot)
 
-            interp_maxi = i
-            channel_bot_max = channel_bot
+            max_df = pandas.DataFrame(data)
 
         # Decend each bank - Min
         interp_depth = 0
         channel_bot = interp_channel['value_smooth'][mini]
         i = mini
-
+        data = {'i': [], 'bot': [], 'dist': []}
         # Handle if depth is greater than the expected
         if channel_top - channel_bot > depth:
             interpolate = False
+            min_df = pandas.DataFrame(data)
             pass
         else:
             while (
@@ -620,13 +626,52 @@ class BarHandler():
                 channel_bot = channel_bot + (m * minslope)
                 if channel_top - channel_bot > depth:
                     channel_bot = channel_top - depth
-                interp_channel['value_smooth'][i] = channel_bot
+#                interp_channel['value_smooth'][i] = channel_bot
+                data['i'].append(i)
+                data['dist'].append(interp_channel['distance'][i])
+                data['bot'].append(channel_bot)
 
-            interp_mini = i
-            channel_bot_min = channel_bot
+            min_df = pandas.DataFrame(data)
 
-        # Set the value between the two edges
+        # Find where/if the two interpolations overlap
+        df = pandas.merge(
+            max_df, 
+            min_df, 
+            how='inner', 
+            left_on='i', 
+            right_on='i'
+        )
+        # If they overlap, find their crossing point
+        if len(df) > 0:
+            min_distance = 9999
+            for idx, row in df.iterrows(): 
+                distance = cdist(
+                    [row[['dist_x', 'bot_x']]], 
+                    [row[['dist_y', 'bot_y']]]
+                )[0][0]
+                if distance < min_distance:
+                    min_distance = distance
+                    min_i = idx
+            crossover = df.iloc[min_i]
+
+        # Crop the max and min interpolated dataframes
+            min_df = min_df[min_df['i'] <= crossover['i']]
+            max_df = max_df[max_df['i'] > crossover['i']]
+
         if interpolate:
+            # find maximum slope and minimum slope channel bottoms
+            channel_bot_max = min(max_df['bot'])
+            interp_maxi = min(max_df['i'])
+
+            channel_bot_min = min(min_df['bot'])
+            interp_mini = max(min_df['i'])
+
+            # Create dataframe for inserting values
+            df = min_df.append(max_df).reset_index(drop=True)
+            for idx, row in df.iterrows():
+                interp_channel[int(row['i'])]['value_smooth'] = row['bot']
+
+            # Set the value between the two edges
             interpi = [interp_mini, interp_maxi]
             interp_channel['value_smooth'][min(interpi):max(interpi)] = min(
                 [channel_bot_max, channel_bot_min]
@@ -653,7 +698,7 @@ class BarHandler():
         line, = ax.plot(x, y, linewidth=3)
         BC = BarPicker(ax, x, y)
 
-        fig.canvas.mpl_connect('pick_event', BC)
+        fig.canvas.mpl_connect('button_press_event', BC)
         line.set_picker(1)
 
         axclear = plt.axes([0.81, 0.17, 0.1, 0.055])

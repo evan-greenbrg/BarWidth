@@ -144,7 +144,7 @@ class BarPicker(object):
 
     def __call__(self, event):
         self.event = event
-        self.x, self.y = event.mouseevent.xdata, event.mouseevent.ydata
+        self.x, self.y = event.xdata, event.ydata
         self.events.append(self.x)
         self.events = list(set(self.events))
 
@@ -177,9 +177,9 @@ if __name__ == "__main__":
     print(DC.mouseY)
 
 
-    bar = '0'
+    bar = '2'
     sections = bar_sections[bar]
-    idx = 5
+    idx = 0
     section = sections[idx]
     
     x = section['elev_section']['distance']
