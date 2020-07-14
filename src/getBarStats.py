@@ -23,12 +23,13 @@ BAR_PARAM_FN = 'bar_parameters.csv'
 BAR_DATA_FN = 'bar_data.csv'
 RSQUARE_FN = 'rsquared_dataframe.csv'
 
-test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX/barParams.yaml'
+test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi/barParams.yaml'
 with open(test_path, "r") as f:
     input_param = load(f, Loader=Loader)
 
 input_param['interpolate'] = True
 input_param['mannual'] = True
+
 
 def sigmoid(x, L ,x0, k):
     y = L / (1 + np.exp(-k*(x-x0)))
@@ -217,7 +218,7 @@ def main():
                     print('\n')
 
                 # Filter based on R-squared value
-                if (rsquared < MIN_RSQUARE) or (popt[2] < 0):
+                if (rsquared < MIN_RSQUARE):
                     width = np.array(
                         tuple(
                             [
