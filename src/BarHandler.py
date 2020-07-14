@@ -21,11 +21,9 @@ def closest(lst, K):
 
 class BarHandler():
 
-    def __init__(self, x0, y0):
+    def __init__(self):
         self.slope_threshold = 1
         self.slope_smooth = 10
-        self.x0 = x0
-        self.y0 = y0
 
     def get_bar_xsections(self, coordinates, xsections, bar):
         tree = spatial.KDTree(coordinates[['easting', 'northing']])
@@ -367,7 +365,7 @@ class BarHandler():
                 diff = abs(slopes[i-1] - slopes[i])
                 continue
 
-    def get_downstream_distance(self, bars):
+    def get_downstream_distance(self, bars, x0, y0):
         """
         Take UTM coordinates from bars dictionary and 
         converts to downstream distance
@@ -376,8 +374,8 @@ class BarHandler():
             distance = []
             for idx, coor in enumerate(bars[key]['coords']):
                 length = (
-                    ((coor[0] - self.x0)**2)
-                    + ((coor[1] - self.y0)**2)
+                    ((coor[0] - x0)**2)
+                    + ((coor[1] - y0)**2)
                 )**(1/2)
                 distance.append(length)
             bars[key]['distance'] = distance
@@ -544,8 +542,8 @@ class BarHandler():
         banks = np.copy(section['bank'])
 
         # Get banks-closest
-        bank0_closest = closest(elev['distance'], banks[0][0])
-        bank1_closest = closest(elev['distance'], banks[1][0])
+        bank0_closest = closest(elev['distance'], banks[0])
+        bank1_closest = closest(elev['distance'], banks[1])
 
         # Get index of banks points
         banks_idx = [
@@ -715,6 +713,4 @@ class BarHandler():
 
         plt.show()
 
-        print(BC.popt)
-        print(BC.rsquared)
-        return BC.popt, BC.rsquared
+        return BC.popt

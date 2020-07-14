@@ -297,14 +297,14 @@ class RiverHandler():
         plt.title('{}: Pick positive Banks First'.format(idx))
         PP = WidthPicker(plt.gca())
         fig.canvas.mpl_connect('pick_event', PP)
-        one.set_picker(3)
+        one.set_picker(1)
         plt.show()
 
         print(PP.mouseX)
         print(PP.mouseY)
 
         banks = [x for x in PP.mouseX]
-        banks = [(banks[0], banks[1]), (banks[2], banks[3])]
+        banks = [(banks[0], banks[1])]
         points = (max(PP.mouseX), min(PP.mouseX))
 
         if points[0] < 0 or points[1] < 0:
@@ -315,7 +315,7 @@ class RiverHandler():
             else:
                 width = points[1] - points[0]
 
-        return banks, width, points
+        return width, points
 
     def find_channel_width_surface_water(self, section):
         """
