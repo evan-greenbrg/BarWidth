@@ -1,8 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas
-from scipy.stats import gaussian_kde
-import seaborn as sns
+
 
 class Visualizer():
 
@@ -11,7 +10,7 @@ class Visualizer():
 
     def get_downstream_distance(self, bargroup):
         """
-        Take UTM coordinates from bars dictionary and 
+        Take UTM coordinates from bars dictionary and
         converts to downstream distance
         """
         df = pandas.DataFrame()
@@ -33,19 +32,18 @@ class Visualizer():
 
         return df
 
-    def plot_downstream_bars(self, bargroup):
+    def plot_downstream_bars(self, bargroup, max_distance, median_width):
         """
         Generates plot of all bar widths as ratio with channel width
         going downstream
         """
         plt.close()
-        fig = plt.figure(figsize = (11, 7))
         widthcol = 'channel_width_water'
         for name, group in bargroup:
             group = group[group[widthcol] > 0]
             plt.scatter(
-                group['distance'] / max_distance, 
-                group[widthcol] / median_width, 
+                group['distance'] / max_distance,
+                group[widthcol] / median_width,
                 s=10
             )
         plt.show()
@@ -67,9 +65,6 @@ class Visualizer():
 
         width_df = width_df.reset_index(drop=True)
         width_df = width_df.dropna(axis=0, how='any')
-
-        x = np.linspace(0, max(width_df['bar_width']) ,100)
-        y = 1.5*x
 
         plt.close()
         plt.scatter(width_df['bar_width'], width_df['channel_width'])

@@ -17,10 +17,8 @@ from matplotlib import pyplot as plt
 
 from RasterHandler import RasterHandler
 from RiverHandler import RiverHandler
-from PointPicker import WidthPicker
 
-
- # If you don't want to sample all of the centerline points
+# If you don't want to sample all of the centerline points
 STEP = 300
 
 
@@ -251,7 +249,7 @@ def main():
             ))
 
         # Save width values to the major cross-section structure
-        xsections[idx]['bank'] = dem_points 
+        xsections[idx]['bank'] = dem_points
         xsections[idx]['dem_width'] = dem_width
         xsections[idx]['water_width'] = water_width
 

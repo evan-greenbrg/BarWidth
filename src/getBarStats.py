@@ -12,10 +12,8 @@ import osr
 import numpy as np
 import pandas
 from pyproj import Proj
-from matplotlib import pyplot as plt
 
 from BarHandler import BarHandler
-from RasterHandler import RasterHandler
 
 
 MIN_RSQUARE = 0.05
@@ -66,7 +64,6 @@ def main():
     myProj = Proj(ProjStr)
 
     # Initialize BarHandler
-    rh = RasterHandler()
     bh = BarHandler()
 
     # Read in the bar file to find the channel bars
@@ -74,9 +71,9 @@ def main():
     bar_df = pandas.read_csv(
         input_param['barPath'],
         names=[
-            'Latitude_us', 
-            'Longitude_us', 
-            'Latitude_ds', 
+            'Latitude_us',
+            'Longitude_us',
+            'Latitude_ds',
             'Longitude_ds'
         ],
         header=1
@@ -162,7 +159,7 @@ def main():
                 filtered += 1
             else:
                 # interpolate profile down
-                if input_param['interpolate'] == True:
+                if input_param['interpolate']:
                     section = bh.interpolate_down(
                         input_param.get('depth'),
                         section
@@ -170,7 +167,7 @@ def main():
 
                 # Find the minimum and shift the cross-section
                 section = bh.shift_cross_section_down(
-                    section, 
+                    section,
                 )
 
                 if input_param['mannual']:
@@ -195,9 +192,9 @@ def main():
                     )
                     # Fit sigmoid parameters
                     popt = bh.fit_sigmoid_parameters(
-                        section, 
-                        banks, 
-                        x0, 
+                        section,
+                        banks,
+                        x0,
                         dydx
                     )
 
