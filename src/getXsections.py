@@ -22,11 +22,12 @@ from PointPicker import WidthPicker
 
 STEP = 3
 
-test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi_Leclair/sectionParams.yaml'
+test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi/sectionParams.yaml'
 with open(test_path, "r") as f:
     param = load(f, Loader=Loader)
 
 param['SectionSmoothing'] = 15
+# param['SectionLength'] = 300
 param['manual'] = True
 param['step'] = 1
 

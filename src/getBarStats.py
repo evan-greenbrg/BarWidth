@@ -23,12 +23,13 @@ BAR_PARAM_FN = 'bar_parameters.csv'
 BAR_DATA_FN = 'bar_data.csv'
 RSQUARE_FN = 'rsquared_dataframe.csv'
 
-test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi/barParams.yaml'
+test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi_Leclair/barParams.yaml'
 with open(test_path, "r") as f:
     input_param = load(f, Loader=Loader)
 
 input_param['interpolate'] = True
 input_param['mannual'] = True
+input_param['depth'] = 30
 
 
 def sigmoid(x, L ,x0, k):
@@ -177,10 +178,13 @@ def main():
             else:
                 # interpolate profile down
                 if input_param['interpolate'] == True:
-                    section = bh.interpolate_down(
-                        input_param.get('depth'),
-                        section
-                    )
+                    try:
+                        section = bh.interpolate_down(
+                            input_param.get('depth'),
+                            section
+                        )
+                    except:
+                        continue
 
                 # Find the minimum and shift the cross-section
                 section = bh.shift_cross_section_down(

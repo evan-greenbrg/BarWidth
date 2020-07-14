@@ -169,8 +169,8 @@ bar_data_df = pandas.DataFrame()
 finn = 25
 n = 10
 # 1 - 1:10
-start = 73
-stop = 91
+start = 0
+stop = 10
 for theta in range(start, stop):
     scoordinates = pandas.DataFrame(columns=[
         'lon', 
@@ -194,10 +194,10 @@ for theta in range(start, stop):
 
         # Find vector at angle
         phi = math.degrees(math.atan(dlat_inv/dlon_inv))
-        dlon_cut = math.cos(math.radians(phi - theta))
-        dlat_cut = math.sin(math.radians(phi - theta))
-#        dlon_cut = dlon_inv    # If I'm just down the normal cuts
-#        dlat_cut = dlat_inv
+#        dlon_cut = math.cos(math.radians(phi - theta))
+#        dlat_cut = math.sin(math.radians(phi - theta))
+        dlon_cut = dlon_inv    # If I'm just down the normal cuts
+        dlat_cut = dlat_inv
 
 #       # Plot the angle
 #        origin = [0, 0], [0, 0] # origin point
@@ -527,4 +527,5 @@ for theta in range(start, stop):
     bar_data_df['sample'] = str(n)
     bar_data_df['ratio'] = bar_data_df['channel_width_mean'] / bar_data_df['bar_width']
 
-bar_data_df.to_csv('barCuts/angle_data/angle_{}_{}.csv'.format(start, stop-1))
+# bar_data_df.to_csv('barCuts/angle_data/angle_{}_{}.csv'.format(start, stop-1))
+bar_data_df.to_csv('barCuts/angle_data/norm.csv')
