@@ -82,58 +82,84 @@ class Visualizer():
             if isinstance(art, PolyCollection):
                 art.set_alpha(a)
 
-    def data_figure(self, out, group_river, group_bar, bar_coefs, reach_coefs,
-                       lit_df, median_size=10, alpha=0.2, density_size=5, 
-                       bar_intercept=None, reach_intercept=None, fmt='png'):
+    def data_figure(self, out, group_river, group_bar,
+                    lit_df, median_size=10, alpha=0.2, density_size=5, 
+                    bar_coefs=None, reach_coefs=None,
+                    bar_intercept=None, reach_intercept=None, 
+                    fmt='png', log=True):
         """ 
         Data Figure that shows bar width and channel width. 
         Density cloud for the individual bar points
         """
         # Get the lines for the estimated parameters
         # Xs
-        xs = np.linspace(0, 1000, 100)
+        xs = np.linspace(0, 1000, 10000)
         # Mean Width
-        if bar_intercept:
-            Ymean5_bar = bar_intercept['mean']['5'] + bar_coefs['mean']['5'] * xs
-            Ymean50_bar = (
-                bar_intercept['mean']['50'] + bar_coefs['mean']['50'] * xs
-            )
-            Ymean95_bar = (
-                bar_intercept['mean']['95'] + bar_coefs['mean']['95'] * xs
-            )
-        else:
-            Ymean5_bar = bar_coefs['mean']['5'] * xs
-            Ymean50_bar = (
-                bar_coefs['mean']['50'] * xs
-            )
-            Ymean95_bar = (
-                bar_coefs['mean']['95'] * xs
-            )
-#            Ymean5_bar = xs**bar_coefs['mean']['5']
-#            Ymean50_bar = xs**bar_coefs['mean']['50']
-#            Ymean95_bar = xs**bar_coefs['mean']['95']
+        if bar_intercept and bar_coefs:
+            if not log:
+                Ymean5_bar = bar_intercept['mean']['5'] + bar_coefs['mean']['5'] * xs
+                Ymean50_bar = (
+                    bar_intercept['mean']['50'] + bar_coefs['mean']['50'] * xs
+                )
+                Ymean95_bar = (
+                    bar_intercept['mean']['95'] + bar_coefs['mean']['95'] * xs
+                )
+            else:
+                Ymean5_bar = bar_intercept['mean']['5'] * (xs**bar_coefs['mean']['5'])
+                Ymean50_bar = bar_intercept['mean']['50'] * (xs**bar_coefs['mean']['50'])
+                Ymean95_bar = bar_intercept['mean']['95'] * (xs**bar_coefs['mean']['95'])
+        elif not bar_intercept and bar_coefs:
+            if not log:
+                Ymean5_bar = bar_coefs['mean']['5'] * xs
+                Ymean50_bar = (
+                    bar_coefs['mean']['50'] * xs
+                )
+                Ymean95_bar = (
+                    bar_coefs['mean']['95'] * xs
+                )
+            else:
+                Ymean5_bar = xs**bar_coefs['mean']['5']
+                Ymean50_bar = xs**bar_coefs['mean']['50']
+                Ymean95_bar = xs**bar_coefs['mean']['95']
+        
+        elif bar_intercept and not bar_coefs:
+            if log:
+                Ymean5_bar = bar_intercept['mean']['5'] * xs
+                Ymean50_bar = bar_intercept['mean']['50'] * xs
+                Ymean95_bar = bar_intercept['mean']['95'] * xs
 
-        if reach_intercept:
-            Ymean5_reach = reach_intercept['mean']['5'] + reach_coefs['mean']['5'] * xs
-            Ymean50_reach = (
-                reach_intercept['mean']['50'] + reach_coefs['mean']['50'] * xs
-            )
-            Ymean95_reach = (
-                reach_intercept['mean']['95'] + reach_coefs['mean']['95'] * xs
-            )
-        else:
-            Ymean5_reach = reach_coefs['mean']['5'] * xs
-            Ymean50_reach = (
-                reach_coefs['mean']['50'] * xs
-            )
-            Ymean95_reach = (
-                reach_coefs['mean']['95'] * xs
-            )
-#            Ymean5_reach = xs**reach_coefs['mean']['5']
-#            Ymean50_reach = xs**reach_coefs['mean']['50']
-#            Ymean95_reach = xs**reach_coefs['mean']['95']
+        if reach_intercept and reach_coefs:
+            if not log:
+                Ymean5_reach = reach_intercept['mean']['5'] + reach_coefs['mean']['5'] * xs
+                Ymean50_reach = (
+                    reach_intercept['mean']['50'] + reach_coefs['mean']['50'] * xs
+                )
+                Ymean95_reach = (
+                    reach_intercept['mean']['95'] + reach_coefs['mean']['95'] * xs
+                )
+            else:
+                Ymean5_reach = reach_intercept['mean']['5'] * xs**reach_coefs['mean']['5']
+                Ymean50_reach = reach_intercept['mean']['50'] * xs**reach_coefs['mean']['50']
+                Ymean95_reach = reach_intercept['mean']['95'] * xs**reach_coefs['mean']['95']
+        elif not reach_intercept and reach_coefs:
+            if not log:
+                Ymean5_reach = reach_coefs['mean']['5'] * xs
+                Ymean50_reach = (
+                    reach_coefs['mean']['50'] * xs
+                )
+                Ymean95_reach = (
+                    reach_coefs['mean']['95'] * xs
+                )
+            else:
+                Ymean5_reach = xs**reach_coefs['mean']['5']
+                Ymean50_reach = xs**reach_coefs['mean']['50']
+                Ymean95_reach = xs**reach_coefs['mean']['95']
+        elif reach_intercept and not reach_coefs:
+            Ymean5_reach = reach_intercept['mean']['5'] * xs
+            Ymean50_reach = reach_intercept['mean']['50'] * xs
+            Ymean95_reach = reach_intercept['mean']['95'] * xs
 
-        fig, ax = plt.subplots(1, 2, sharex=True, sharey=True)
+        fig, ax = plt.subplots(1, 2)
         fig.set_figheight(15)
         fig.set_figwidth(15)
 
@@ -148,8 +174,8 @@ class Visualizer():
         )
         ax[1].fill_between(
             xs, 
-            Ymean5_reach, 
-            Ymean95_reach, 
+            Ymean5_bar, 
+            Ymean95_bar, 
             color='lightgray', 
             edgecolor='lightgray',
             linestyle='--'
@@ -188,10 +214,10 @@ class Visualizer():
             linestyle=line_style,
             zorder=2
         )
-        # Reach 
+
         ax[1].plot(
             xs,
-            Ymean5_reach,
+            Ymean5_bar,
             linewidth=width,
             color=color,
             linestyle=line_style,
@@ -199,7 +225,7 @@ class Visualizer():
         )
         ax[1].plot(
             xs,
-            Ymean50_reach,
+            Ymean50_bar,
             linewidth=width50,
             color=color,
             linestyle=line50,
@@ -207,7 +233,7 @@ class Visualizer():
         )
         ax[1].plot(
             xs,
-            Ymean95_reach,
+            Ymean95_bar,
             linewidth=width,
             color=color,
             linestyle=line_style,
@@ -225,22 +251,14 @@ class Visualizer():
             'brown', 
             'White', 
             'pink',
-            'lime'
-        ]
-        ms_cmaps = [
-            'Blues', 
-            'Greens', 
-            'Reds', 
-            'Oranges', 
-            'Purples',
-            'Blues',
-            'Yellows',
-            'Grays',
-            'PuBu',
-            'YlOrRd'
+            'lime',
+            '#c0b4ff',
+            '#ffc0b4'
         ]
         i = 0
         for name, group in group_bar:
+            print(name)
+            print(bar_colors[i])
             ax[0].plot(
                 group['bar_width'], 
                 group['mean_width'], 
@@ -263,6 +281,14 @@ class Visualizer():
                 label=name,
                 color=bar_colors[i]
             )
+            ax[1].errorbar(
+                group['bar_width'].median(),
+                group['mean_width'].median(),
+                yerr=(group['mean_width'].std() / 2),
+                xerr=(group['bar_width'].std() / 2),
+                ecolor=bar_colors[i],
+                capthick=5
+            )
             i += 1
 
         # Literature Values
@@ -278,7 +304,8 @@ class Visualizer():
             'violet',
             'orange',
             'lime',
-            'gold'
+            'gold',
+            '#151B8D'
         ]
         j = 0
         for idx, row in lit_df.iterrows():
@@ -290,36 +317,30 @@ class Visualizer():
                 label=row['River']
             ) 
             j += 1
+        fig.legend()
 
-#        # Validation Data
-#        my_val = (43, 93)
-#        swartz_val = (42.5, 127)
-#        ax[1].plot(
-#            my_val[0], 
-#            my_val[1],
-#            marker='s',
-#            markerfacecolor='gold',
-#            markeredgecolor='black',
-#            markeredgewidth=1.5
-#        )
-#        ax[1].plot(
-#            swartz_val[0], 
-#            swartz_val[1],
-#            marker='s',
-#            markerfacecolor='red',
-#            markeredgecolor='black',
-#            markeredgewidth=1.5
-#        )
-
-        # Add the 1:1 line and 1:10
-        y11 = xs
-        y110 = xs * 10
-        col = 'black'
+        # Add the other methods 
+        ySchum = 1.5*xs
+        col = 'gray'
         lin = '--'
-        ax[0].plot(xs, y11, c=col, linestyle=lin)
-        ax[0].plot(xs, y110, c=col, linestyle=lin)
-        ax[1].plot(xs, y11, c=col, linestyle=lin)
-        ax[1].plot(xs, y110, c=col, linestyle=lin)
+
+        # Width- Depth
+        widthdepthdf = pandas.DataFrame({
+            'river': ['Mississippi', 'White', 'Koyukuk', 'Trinity', 'Powder', 'Red', 'Brazos', 'Tombigbee', 'Rio Grane'],
+            'depth': [26, 3, 7, 12, 3.5, 9, 11, 14.5, 10],
+            'widthCalc': [468, 54, 126, 216, 63, 162, 198, 261, 180],
+            'bar_width': [182.5, 21.8, 123., 63., 19., 24., 66., 90.5, 45.]
+        })
+        widthdepthdf = widthdepthdf.sort_values('bar_width').reset_index(drop=True)
+
+        # Schum
+        ax[1].plot(xs, ySchum, c=col, linestyle='-.')
+        # My method
+        ax[1].plot(xs, Ymean50_bar, c=col, linestyle=lin)
+        # Width-Depth
+#        ax[1].plot(widthdepthdf['bar_width'], widthdepthdf['widthCalc'])
+        ax[0].plot(xs, xs**1, c=col, linestyle=lin)
+        ax[1].plot(xs, xs**1, c=col, linestyle=lin)
 
         # Log axis 
         ax[0].set_yscale('log')
@@ -343,14 +364,14 @@ class Visualizer():
         ax[1].set_ylabel('')
 
         # Sizeing
-        ax[0].set(aspect=1)
-        ax[1].set(aspect=1)
+        ax[0].set(aspect=.9)
+        ax[1].set(aspect=.9)
 
         # Set axis range
-        ax[0].set_xlim(1, 1500)
-        ax[0].set_ylim(1, 1500)
-        ax[1].set_xlim(1, 1500)
-        ax[1].set_ylim(1, 1500)
+        ax[0].set_xlim(10, 1000)
+        ax[0].set_ylim(10, 3000)
+        ax[1].set_xlim(5, 1000)
+        ax[1].set_ylim(5, 3000)
 
         # Axis text
         fig.text(0.5, 0.1, 'Bar Width (m)', ha='center')

@@ -4,78 +4,6 @@ from matplotlib import pyplot as plt
 import glob
 
 
-cutf1 = '/home/greenberg/Code/Github/river-profiles/src/barCuts/cut_0_9.csv'
-cutf2 = '/home/greenberg/Code/Github/river-profiles/src/barCuts/cut_10_16.csv'
-normf1 = '/home/greenberg/Code/Github/river-profiles/src/barCuts/norm_0_15.csv'
-
-
-cut1 = pandas.read_csv(cutf1)
-cut2 = pandas.read_csv(cutf2)
-norm = pandas.read_csv(normf1)
-
-cut = cut1.append(cut2)
-
-cut_g = cut.groupby('idx').mean()
-norm_g = norm.groupby('idx').mean()
-
-plt.scatter(cut_g.index, cut_g['ratio'], label='Oblique Cuts')
-plt.scatter(norm_g.index, norm_g['ratio'], label='Perpendicular Cuts')
-plt.legend()
-plt.show()
-
-n = 25
-times = 101
-idx = [i for i in range(1, n+1)]
-cuts = {str(i): [] for i in range(1, n+1)}
-norms = {str(i): [] for i in range(1, n+1)}
-for j in range(1, times):
-    for i in range(1, n+1):
-        cuts[str(i)].append(cut.sample(i)['ratio'].median())
-        norms[str(i)].append(norm.sample(i)['ratio'].median())
-
-df = pandas.DataFrame()
-for i in range(1, n+1):
-    plt.scatter(
-        [i for j in cuts[str(i)]],
-        cuts[str(i)],
-        c='#b2b2b2'
-    )
-    plt.scatter(
-        [i for j in norms[str(i)]],
-        norms[str(i)],
-        c='#b3c5f8'
-    )
-#    plt.scatter(i, np.mean(cuts[str(i)]), c='#333333')
-#    plt.scatter(i, np.mean(norms[str(i)]), c='#4c4cff')
-
-plt.xlabel('Samples')
-plt.ylabel('Channel Width / Bar Width')
-plt.yticks(np.arange(0, 30, 2.0))
-plt.show()
-
-
-    df = df.append(pandas.DataFrame({
-        'i': idx[i-1],
-        'cut_min': min(cuts[str(i)]),
-        'cut_med': np.median(cuts[str(i)]),
-        'cut_max': max(cuts[str(i)]),
-        'norm_min': min(norms[str(i)]),
-        'norm_med': np.median(norms[str(i)]),
-        'norm_max': max(norms[str(i)])
-    }, index=[i]))
-
-
-plt.scatter(df['i'], df['cut_min'])
-plt.scatter(df['i'], df['cut_max'])
-plt.scatter(df['i'], df['cut_med'], label='Oblique Cuts')
-plt.scatter(df['i'], df['norm_min'])
-plt.scatter(df['i'], df['norm_max'])
-plt.scatter(df['i'], df['norm_med'], label='Perpendicular Cuts')
-plt.legend()
-plt.show()
-
-
-
 f = 'angle_data/*.csv'
 fps = glob.glob(f)
 
@@ -93,36 +21,50 @@ plt.ylabel('Channel Width / Bar Surface Width')
 fig.savefig('/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/figures/62420bar_cut_angles.svg', format='svg')
 plt.show()
 
-normf = '/home/greenberg/Code/Github/river-profiles/src/barCuts/norm_0_15.csv'
+normf = '/home/greenberg/Code/Github/river-profiles/src/barCuts/angle_data/norm.csv'
 norm = pandas.read_csv(normf)
 
+df = df[df['theta'] < 70]
 n = 25
 times = 101
 idx = [i for i in range(1, n+1)]
 cuts = {str(i): [] for i in range(1, n+1)}
 norms = {str(i): [] for i in range(1, n+1)}
-fig2 = plt.figure()
+fig, ax = plt.subplots()
 for j in range(1, times):
     for i in range(1, n+1):
         cuts[str(i)].append(df.sample(i)['ratio'].median())
         norms[str(i)].append(norm.sample(i)['ratio'].median())
 
+c = '#50C878'
+c2 = '#ffd381'
 for i in range(1, n+1):
-    plt.scatter(
-        [i for j in cuts[str(i)]],
-        cuts[str(i)],
-        c='#333333'
+    ax.boxplot(
+        norms[str(i)], positions=[i], widths=0.7, showfliers=False,
+        patch_artist=True,
+        boxprops=dict(facecolor=c, color=c),
+        capprops=dict(color=c),
+        whiskerprops=dict(color=c),
+        flierprops=dict(color=c, markeredgecolor=c),
+        medianprops=dict(color=c),
+        zorder=20
     )
-    plt.scatter(
-        [i for j in norms[str(i)]],
-        norms[str(i)],
-        c='#b3c5f8'
+    ax.boxplot(
+        cuts[str(i)], positions=[i], widths=0.7, showfliers=False,
+        patch_artist=True,
+        boxprops=dict(facecolor=c2, color=c2),
+        capprops=dict(color=c2),
+        whiskerprops=dict(color=c2),
+        flierprops=dict(color=c2, markeredgecolor=c2),
+        medianprops=dict(color=c2),
     )
+
+ax.set_ylim([0, 10])
 
 plt.xlabel('Samples')
 plt.ylabel('Channel Width / Bar Surface Width')
 plt.yticks(np.arange(0, 44, 4.0))
 plt.legend(['Oblique Cross-Sections', 'Normal Cross-Sections'])
 
-fig2.savefig('/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/figures/62420bar_cut_samples.svg', format='svg')
+fig2.savefig('/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/figures/63020bar_cut_samples.svg', format='svg')
 plt.show()

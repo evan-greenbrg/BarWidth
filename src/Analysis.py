@@ -11,27 +11,29 @@ from sklearn.metrics import r2_score
 
 from Visualizer import Visualizer
 
-def posterior_distribution(X, y, N, fit_intercept=True):
+def posterior_distribution(X, y, N, fit_intercept=True, fit_slope=True):
     reg = LinearRegression(fit_intercept=fit_intercept).fit(X.values.reshape(-1, 1), y.values)
     # Set up
     with pm.Model() as model:
         # Intercept
-        intercept = pm.Normal('Intercept', mu=float(reg.intercept_), sd=25)
+        intercept = pm.Normal('Intercept', mu=.5, sd=1)
         # sd = 25
 
         # Slope
-        slope = pm.Normal('slope', mu=float(reg.coef_), sd=1)
+        slope = pm.Normal('slope', mu=float(2*reg.coef_), sd=1)
         # sd = 1
 
         # Standard Deviation
-        sigma = pm.HalfNormal('sigma', sd=25)
+        sigma = pm.HalfNormal('sigma', sd=1)
         # sd = 25
 
         # Estimate of Mean
-        if not fit_intercept:
+        if fit_slope and not fit_intercept:
             mean = slope * X.values
+        if fit_intercept and not fit_slope:
+            mean = intercept + X.values
         else:
-            mean = intercept + slope * X.values
+            mean = intercept + (slope * X.values)
 
         # Observed Values
         Y_obs = pm.Normal('Y_obs', mu=mean, sd=sigma, observed=y.values)
@@ -45,9 +47,11 @@ def posterior_distribution(X, y, N, fit_intercept=True):
 
 def getRsquared(slope, bar_df, intercept=None):
     if intercept:
-        bar_df['pred'] = (slope * bar_df['bar_width']) + intercept
+#        bar_df['pred'] = (slope * bar_df['bar_width']) + intercept
+        bar_df['pred'] = intercept * (bar_df['log_bar_width']**slope)
     else:
-        bar_df['pred'] = slope * bar_df['bar_width']
+#        bar_df['pred'] = slope * bar_df['bar_width']
+        bar_df['pred'] = (bar_df['log_bar_width']**slope)
 
     return r2_score(bar_df['mean_width'], bar_df['pred'])
 
@@ -68,11 +72,11 @@ ms_df = ms_df[ms_df.river!='Platte River']
 # ms_df = ms_df[ms_df.river!='Tombigbee River']
 
 # Get rid of Mississippi Leclair
-bar_df = bar_df[bar_df.river!='Mississippi River - Leclair']
-ms_df = ms_df[ms_df.river!='Mississippi River - Leclair']
+# bar_df = bar_df[bar_df.river!='Mississippi River - Leclair']
+# ms_df = ms_df[ms_df.river!='Mississippi River - Leclair']
 
-bar_df = bar_df[bar_df.river!='Mississippi River']
-ms_df = ms_df[ms_df.river!='Mississippi River']
+# bar_df = bar_df[bar_df.river!='Mississippi River']
+# ms_df = ms_df[ms_df.river!='Mississippi River']
 
 # Clean
 bar_df = bar_df[[
@@ -105,66 +109,111 @@ bar_df['mean_width'] = (
 reach_df = bar_df.groupby('river').median().drop('bar', axis=1).reset_index()
 
 # Do the log transforms
-ms_df['log_bar_width'] = np.log(ms_df['bar_width'])
-ms_df['log_mean_width'] = np.log(ms_df['mean_width'])
-ms_df['log_dem_width'] = np.log(ms_df['channel_width_dem'])
-ms_df['log_water_width'] = np.log(ms_df['channel_width_water'])
+ms_df['log_bar_width'] = np.log10(ms_df['bar_width'])
+ms_df['log_mean_width'] = np.log10(ms_df['mean_width'])
+ms_df['log_dem_width'] = np.log10(ms_df['channel_width_dem'])
+ms_df['log_water_width'] = np.log10(ms_df['channel_width_water'])
 
-bar_df['log_bar_width'] = np.log(bar_df['bar_width'])
-bar_df['log_mean_width'] = np.log(bar_df['mean_width'])
-bar_df['log_dem_width'] = np.log(bar_df['channel_width_dem'])
-bar_df['log_water_width'] = np.log(bar_df['channel_width_water'])
+bar_df['log_bar_width'] = np.log10(bar_df['bar_width'])
+bar_df['log_mean_width'] = np.log10(bar_df['mean_width'])
+bar_df['log_dem_width'] = np.log10(bar_df['channel_width_dem'])
+bar_df['log_water_width'] = np.log10(bar_df['channel_width_water'])
 
-reach_df['log_bar_width'] = np.log(reach_df['bar_width'])
-reach_df['log_mean_width'] = np.log(reach_df['mean_width'])
-reach_df['log_dem_width'] = np.log(reach_df['channel_width_dem'])
-reach_df['log_water_width'] = np.log(reach_df['channel_width_water'])
+reach_df['log_bar_width'] = np.log10(reach_df['bar_width'])
+reach_df['log_mean_width'] = np.log10(reach_df['mean_width'])
+reach_df['log_dem_width'] = np.log10(reach_df['channel_width_dem'])
+reach_df['log_water_width'] = np.log10(reach_df['channel_width_water'])
 
 # Ms_df
-Xms = ms_df.loc[:, 'bar_width']
-yms = {
-    'dem': ms_df.loc[:, 'channel_width_dem'],
-    'water': ms_df.loc[:, 'channel_width_water'],
-    'mean': ms_df.loc[:, 'mean_width'],
-}
 
-# Bar_df
-Xbar = bar_df.loc[:, 'bar_width']
-ybar = {
-    'dem': bar_df.loc[:, 'channel_width_dem'],
-    'water': bar_df.loc[:, 'channel_width_water'],
-    'mean': bar_df.loc[:, 'mean_width'],
-}
+log = True
+if log == True:
+    Xms = ms_df.loc[:, 'log_bar_width']
+    yms = {
+        'dem': ms_df.loc[:, 'log_dem_width'],
+        'water': ms_df.loc[:, 'log_water_width'],
+        'mean': ms_df.loc[:, 'log_mean_width'],
+    }
 
-# Reach_df
-Xreach = reach_df.loc[:, 'bar_width']
-yreach = {
-    'dem': reach_df.loc[:, 'channel_width_dem'],
-    'water': reach_df.loc[:, 'channel_width_water'],
-    'mean': reach_df.loc[:, 'mean_width'],
-}
+    # Bar_df
+    Xbar = bar_df.loc[:, 'log_bar_width']
+    ybar = {
+        'dem': bar_df.loc[:, 'log_dem_width'],
+        'water': bar_df.loc[:, 'log_water_width'],
+        'mean': bar_df.loc[:, 'log_mean_width'],
+    }
 
-fit_intercept = False
+    # Reach_df
+    Xreach = reach_df.loc[:, 'log_bar_width']
+    yreach = {
+        'dem': reach_df.loc[:, 'log_dem_width'],
+        'water': reach_df.loc[:, 'log_water_width'],
+        'mean': reach_df.loc[:, 'log_mean_width'],
+    }
+else:
+    Xms = ms_df.loc[:, 'bar_width']
+    yms = {
+        'dem': ms_df.loc[:, 'channel_width_dem'],
+        'water': ms_df.loc[:, 'channel_width_water'],
+        'mean': ms_df.loc[:, 'mean_width'],
+    }
+
+    # Bar_df
+    Xbar = bar_df.loc[:, 'bar_width']
+    ybar = {
+        'dem': bar_df.loc[:, 'channel_width_dem'],
+        'water': bar_df.loc[:, 'channel_width_water'],
+        'mean': bar_df.loc[:, 'mean_width'],
+    }
+
+    # Reach_df
+    Xreach = reach_df.loc[:, 'bar_width']
+    yreach = {
+        'dem': reach_df.loc[:, 'channel_width_dem'],
+        'water': reach_df.loc[:, 'channel_width_water'],
+        'mean': reach_df.loc[:, 'mean_width'],
+    }
+
+fit_intercept = True
+fit_slope = False
 # ms df trace
 trace_ms = {}
 for key, value in yms.items():
-    trace_ms[key] = posterior_distribution(Xms, value, 3000, fit_intercept)
+    trace_ms[key] = posterior_distribution(
+        Xms, 
+        value, 
+        1000, 
+        fit_intercept,
+        fit_slope
+    )
 
 # bar df trace
 trace_bar = {}
 for key, value in ybar.items():
-    trace_bar[key] = posterior_distribution(Xbar, value, 3000, fit_intercept)
+    trace_bar[key] = posterior_distribution(
+        Xbar, 
+        value, 
+        1000, 
+        fit_intercept,
+        fit_slope
+    )
 
 # reach df trace
 trace_reach = {}
 for key, value in yreach.items():
-    trace_reach[key] = posterior_distribution(Xreach, value, 3000, fit_intercept)
+    trace_reach[key] = posterior_distribution(
+        Xreach, 
+        value, 
+        1000, 
+        fit_intercept,
+        fit_slope
+    )
 
 # Coef estimation
 ms_coefs = {}
 for key, value in trace_ms.items():
     ms_coefs[key] = {
-        '5': np.quantile(value['slope'], 0.05),
+        '5': 10**np.quantile(value['slope'], 0.05),
         '50': np.quantile(value['slope'], 0.5),
         '95': np.quantile(value['slope'], 0.95)
     }
@@ -187,23 +236,23 @@ for key, value in trace_reach.items():
 ms_intercept = {}
 for key, value in trace_ms.items():
     ms_intercept[key] = {
-        '5': np.quantile(value['Intercept'], 0.05),
-        '50': np.quantile(value['Intercept'], 0.5),
-        '95': np.quantile(value['Intercept'], 0.95)
+        '5': 10**np.quantile(value['Intercept'], 0.05),
+        '50': 10**np.quantile(value['Intercept'], 0.5),
+        '95': 10**np.quantile(value['Intercept'], 0.95)
     }
 bar_intercept = {}
 for key, value in trace_bar.items():
     bar_intercept[key] = {
-        '5': np.quantile(value['Intercept'], 0.05),
-        '50': np.quantile(value['Intercept'], 0.5),
-        '95': np.quantile(value['Intercept'], 0.95)
+        '5': 10**np.quantile(value['Intercept'], 0.05),
+        '50': 10**np.quantile(value['Intercept'], 0.5),
+        '95': 10**np.quantile(value['Intercept'], 0.95)
     }
 reach_intercept = {}
 for key, value in trace_reach.items():
     reach_intercept[key] = {
-        '5': np.quantile(value['Intercept'], 0.05),
-        '50': np.quantile(value['Intercept'], 0.5),
-        '95': np.quantile(value['Intercept'], 0.95)
+        '5': 10**np.quantile(value['Intercept'], 0.05),
+        '50': 10**np.quantile(value['Intercept'], 0.5),
+        '95': 10**np.quantile(value['Intercept'], 0.95)
     }
 
 # Group by river
@@ -228,16 +277,112 @@ vh.data_figure(
     outpath,
     group_river,
     group_bar,
-    bar_coefs,
-    reach_coefs,
     lit_df,
     median_size=5,
     alpha=0.25,
     density_size=35,
+#    bar_coefs=bar_coefs,
+#    reach_coefs=reach_coefs,
+    bar_intercept=bar_intercept,
+    reach_intercept=reach_intercept,
     fmt='svg',
-#    bar_intercept=bar_intercept
+    log=True
 )
 
-median_df = group_bar.median() 
-allr2 = getRsquared(bar_coefs['mean']['50'], bar_df)
-medr2 = getRsquared(bar_coefs['mean']['50'], median_df)
+
+bar_r2 = []
+reach_r2 = []
+opts = ['5', '50', '95']
+spts = []
+ipts = []
+for iopt in opts:
+    print(iopt)
+    for sopt in opts:
+        print(sopt)
+        reach_df['predicted'] = (
+            bar_intercept['mean'][iopt] 
+            * 10**(reach_df['log_bar_width']**bar_coefs['mean'][sopt])
+        )
+        bar_df['predicted'] = (
+            bar_intercept['mean'][iopt] 
+            * 10**(bar_df['log_bar_width']**bar_coefs['mean'][sopt])
+        )
+
+        ipts.append(iopt)
+        spts.append(sopt)
+        bar_r2.append(r2_score(bar_df['mean_width'], bar_df['predicted']))
+        reach_r2.append(r2_score(reach_df['mean_width'], reach_df['predicted']))
+
+r2_df = pandas.DataFrame(data={
+    'intercept': ipts,
+    'slope': spts,
+    'barr2': bar_r2,
+    'reachr2': reach_r2
+})
+
+i = '50'
+s = '50'
+log = True
+# Log
+if log:
+    if fit_slope:
+        reach_df['predicted'] = (
+            bar_intercept['mean'][i] 
+            * 10**(reach_df['log_bar_width'])**bar_coefs['mean'][s])
+        )
+        bar_df['predicted'] = (
+            bar_intercept['mean'][i] 
+            * 10**(bar_df['log_bar_width'])**bar_coefs['mean'][s])
+        )
+    else:
+        reach_df['predicted'] = (
+            bar_intercept['mean'][i] 
+            * 10**(reach_df['log_bar_width'])
+        )
+        bar_df['predicted'] = (
+            bar_intercept['mean'][i] 
+            * 10**(bar_df['log_bar_width'])
+        )
+else:
+#    Normal
+    reach_df['predicted'] = (
+        reach_df['bar_width']*bar_coefs['mean'][s]
+    )
+    bar_df['predicted'] = (
+        bar_df['bar_width']*bar_coefs['mean'][s]
+    )
+bar_df['SchummPred'] = bar_df['bar_width'] * 1.5
+reach_df['SchummPred'] = reach_df['bar_width'] * 1.5
+
+r2Bar = r2_score(bar_df['mean_width'], bar_df['predicted'])
+r2Reach = r2_score(reach_df['mean_width'], reach_df['predicted'])
+
+r2SchummBar = r2_score(bar_df['mean_width'], bar_df['SchummPred'])
+r2SchummReach = r2_score(reach_df['mean_width'], reach_df['SchummPred'])
+
+# Figure with predicted vs actual
+fig, axs = plt.subplots(1, 2, sharey=True, sharex=True)
+xs = np.linspace(0, 10000, 10000)
+axs[0].scatter(reach_df['predicted'], reach_df['mean_width'], c='black')
+axs[0].plot(xs, xs, linestyle='--', c='black')
+axs[0].set_yscale('log')
+axs[0].set_xscale('log')
+
+axs[1].scatter(bar_df['predicted'], bar_df['mean_width'], c='black')
+axs[1].plot(xs, xs, linestyle='--', c='black')
+axs[1].set_yscale('log')
+axs[1].set_xscale('log')
+
+axs[0].set_xlim(10, 4000)
+axs[0].set_ylim(10, 3000)
+
+fig.text(0.5, 0.01, 'Predicted Channel Width (m)', ha='center')
+fig.text(
+    0.04, 
+    0.5, 
+    'Channel Width (m)', 
+    va='center', 
+    rotation='vertical'
+)
+
+plt.show()

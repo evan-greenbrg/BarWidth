@@ -120,14 +120,14 @@ def get_tiles(path, n):
 
             yield window, transform
 
-DemPath = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX'
+DemPath = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/sacramento_merged_26910.tif'
 
-B3path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX/Landsat/RioGrande_B3_26914_clip.tif'
-B6path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX/Landsat/RioGrande_B6_26914_clip.tif'
+B3path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/sacramento_b3_clip_26910.tif'
+B6path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/sacramento_b6_clip_26910.tif'
 
-B3out = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX/Landsat/RioGrande_B3_26914_clip.tif'
-B6out = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX/Landsat/RioGrande_B6_26914_clip.tif'
-epsg = 29614
+B3out = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/sacramento_b3_clip_26910.tif'
+B6out = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/sacramento_b6_clip_26910.tif'
+epsg = 29610
 
 # Clip the Raster
 # clip_raster(B3path, DemPath, epsg, B3out)
@@ -162,8 +162,8 @@ for window, transform in get_tiles(B3out, 1):
                 rasterio.transform.xy(transform, pair[0], pair[1])
             )
 
-oroot = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX'
-f = 'riogrande_water_points.csv'
+oroot = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento'
+f = 'savramento_water_points.csv'
 outpath = os.path.join(oroot, f)
 
 coordinate_df = pandas.DataFrame(coordinates, columns=['lon', 'lat'])
@@ -175,9 +175,9 @@ from RasterHandler import RasterHandler
 
 
 rh = RasterHandler()
-centerline_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX/riograndeTX_centerline.csv'
+centerline_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/savramento_centerline.csv'
 
-iepsg = 26914
+iepsg = 26910
 oepsg = 4326 
 df = pandas.read_csv(centerline_path)
 df = df.iloc[::4, :]
@@ -192,5 +192,5 @@ for i, row in df.iterrows():
 df['lon_'] = lon
 df['lat_'] = lat
 
-out_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX/riograndeTX_centerline_4326.csv'
+out_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/savramento_centerline_4326.csv'
 df.to_csv(out_path)
