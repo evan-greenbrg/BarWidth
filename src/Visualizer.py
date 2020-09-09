@@ -72,18 +72,13 @@ class Visualizer():
         plt.ylabel('Channel Width (m)')
         plt.savefig(path)
 
-    def setAlpha(self, ax,a):
-        for art in ax.get_children():
-            if isinstance(art, PolyCollection):
-                art.set_alpha(a)
-
     def data_figure(self, out, ms_df, group_river, group_bar,
-                    lit_df, median_size=10, alpha=0.2, density_size=5, 
+                    lit_df, median_size=10, alpha=0.2, density_size=5,
                     bar_coefs=None, reach_coefs=None,
-                    bar_intercept=None, reach_intercept=None, 
+                    bar_intercept=None, reach_intercept=None,
                     fmt='png', log=True):
-        """ 
-        Data Figure that shows bar width and channel width. 
+        """
+        Data Figure that shows bar width and channel width.
         Density cloud for the individual bar points
         """
         # Get the lines for the estimated parameters
@@ -92,7 +87,9 @@ class Visualizer():
         # Mean Width
         if bar_intercept and bar_coefs:
             if not log:
-                Ymean5_bar = bar_intercept['mean']['5'] + bar_coefs['mean']['5'] * xs
+                Ymean5_bar = (
+                    bar_intercept['mean']['5'] + bar_coefs['mean']['5'] * xs
+                )
                 Ymean50_bar = (
                     bar_intercept['mean']['50'] + bar_coefs['mean']['50'] * xs
                 )
@@ -100,9 +97,17 @@ class Visualizer():
                     bar_intercept['mean']['95'] + bar_coefs['mean']['95'] * xs
                 )
             else:
-                Ymean5_bar = bar_intercept['mean']['5'] * (xs**bar_coefs['mean']['5'])
-                Ymean50_bar = bar_intercept['mean']['50'] * (xs**bar_coefs['mean']['50'])
-                Ymean95_bar = bar_intercept['mean']['95'] * (xs**bar_coefs['mean']['95'])
+                Ymean5_bar = (
+                    bar_intercept['mean']['5'] * (xs**bar_coefs['mean']['5'])
+                )
+                Ymean50_bar = (
+                    bar_intercept['mean']['50']
+                    * (xs**bar_coefs['mean']['50'])
+                )
+                Ymean95_bar = (
+                    bar_intercept['mean']['95']
+                    * (xs**bar_coefs['mean']['95'])
+                )
         elif not bar_intercept and bar_coefs:
             if not log:
                 Ymean5_bar = bar_coefs['mean']['5'] * xs
@@ -116,7 +121,7 @@ class Visualizer():
                 Ymean5_bar = xs**bar_coefs['mean']['5']
                 Ymean50_bar = xs**bar_coefs['mean']['50']
                 Ymean95_bar = xs**bar_coefs['mean']['95']
-        
+
         elif bar_intercept and not bar_coefs:
             if log:
                 Ymean5_bar = bar_intercept['mean']['5'] * xs
@@ -125,17 +130,31 @@ class Visualizer():
 
         if reach_intercept and reach_coefs:
             if not log:
-                Ymean5_reach = reach_intercept['mean']['5'] + reach_coefs['mean']['5'] * xs
+                Ymean5_reach = (
+                    reach_intercept['mean']['5']
+                    + (reach_coefs['mean']['5'] * xs)
+                )
                 Ymean50_reach = (
-                    reach_intercept['mean']['50'] + reach_coefs['mean']['50'] * xs
+                    reach_intercept['mean']['50']
+                    + (reach_coefs['mean']['50'] * xs)
                 )
                 Ymean95_reach = (
-                    reach_intercept['mean']['95'] + reach_coefs['mean']['95'] * xs
+                    reach_intercept['mean']['95']
+                    + (reach_coefs['mean']['95'] * xs)
                 )
             else:
-                Ymean5_reach = reach_intercept['mean']['5'] * xs**reach_coefs['mean']['5']
-                Ymean50_reach = reach_intercept['mean']['50'] * xs**reach_coefs['mean']['50']
-                Ymean95_reach = reach_intercept['mean']['95'] * xs**reach_coefs['mean']['95']
+                Ymean5_reach = (
+                    reach_intercept['mean']['5']
+                    * (xs**reach_coefs['mean']['5'])
+                )
+                Ymean50_reach = (
+                    reach_intercept['mean']['50']
+                    * (xs**reach_coefs['mean']['50'])
+                )
+                Ymean95_reach = (
+                    reach_intercept['mean']['95']
+                    * (xs**reach_coefs['mean']['95'])
+                )
         elif not reach_intercept and reach_coefs:
             if not log:
                 Ymean5_reach = reach_coefs['mean']['5'] * xs
@@ -160,18 +179,18 @@ class Visualizer():
 
         # Plot the parameter fill
         ax[0].fill_between(
-            xs, 
-            Ymean5_bar, 
-            Ymean95_bar, 
-            color='lightgray', 
+            xs,
+            Ymean5_bar,
+            Ymean95_bar,
+            color='lightgray',
             edgecolor='lightgray',
             linestyle='--'
         )
         ax[1].fill_between(
-            xs, 
-            Ymean5_bar, 
-            Ymean95_bar, 
-            color='lightgray', 
+            xs,
+            Ymean5_bar,
+            Ymean95_bar,
+            color='lightgray',
             edgecolor='lightgray',
             linestyle='--'
         )
@@ -237,14 +256,14 @@ class Visualizer():
 
         # Plot the data
         bar_colors = [
-            'b', 
-            'g', 
-            'r', 
-            'orange', 
-            'm', 
-            'yellow', 
-            'brown', 
-            'White', 
+            'b',
+            'g',
+            'r',
+            'orange',
+            'm',
+            'yellow',
+            'brown',
+            'White',
             'pink',
             'lime',
             '#c0b4ff',
@@ -256,24 +275,24 @@ class Visualizer():
             print(i)
             # Bend
             ax[0].plot(
-                ms_df[ms_df['river']==name]['bar_width'],
-                ms_df[ms_df['river']==name]['mean_width'],
-                marker='o', 
-                linestyle='', 
-                ms=6, 
+                ms_df[ms_df['river'] == name]['bar_width'],
+                ms_df[ms_df['river'] == name]['mean_width'],
+                marker='o',
+                linestyle='',
+                ms=6,
                 alpha=0.3,
                 label=name,
                 color=bar_colors[i]
             )
             ax[0].plot(
-                group['bar_width'], 
-                group['mean_width'], 
-                marker='o', 
+                group['bar_width'],
+                group['mean_width'],
+                marker='o',
                 markeredgewidth=1.5,
                 markeredgecolor='black',
-                linestyle='', 
+                linestyle='',
                 zorder=98,
-                ms=median_size, 
+                ms=median_size,
                 label=name,
                 color=bar_colors[i]
             )
@@ -283,7 +302,7 @@ class Visualizer():
                 yerr=(group['channel_width_mean_std']),
                 xerr=(group['bar_width_std']),
                 ecolor='gray',
-                linestyle='', 
+                linestyle='',
                 capthick=5
             )
 
@@ -291,11 +310,11 @@ class Visualizer():
 #            ax[1].plot(
 #                group['bar_width'].median(),
 #                group['mean_width'].median(),
-#                marker='o', 
+#                marker='o',
 #                markeredgewidth=1.5,
 #                markeredgecolor='black',
-#                linestyle='', 
-#                ms=median_size, 
+#                linestyle='',
+#                ms=median_size,
 #                label=name,
 #                color=bar_colors[i]
 #            )
@@ -329,12 +348,12 @@ class Visualizer():
         for idx, row in lit_df.iterrows():
             ax[1].plot(
                 row['Bar Width'],
-                row['Channel Width'], 
+                row['Channel Width'],
                 marker='^',
                 c=colors[j],
                 ms=15,
                 label=row['River']
-            ) 
+            )
             j += 1
         # fig.legend()
         # Ancient Values
@@ -365,7 +384,7 @@ class Visualizer():
         ax[0].plot(xs, xs**1, c=col, linestyle=lin)
         ax[1].plot(xs, xs**1, c=col, linestyle=lin)
 
-        # Log axis 
+        # Log axis
         ax[0].set_yscale('log')
         ax[1].set_yscale('log')
         ax[0].set_xscale('log')
@@ -378,8 +397,8 @@ class Visualizer():
         #  Legend
         handles, labels = ax[0].get_legend_handles_labels()
         # fig.legend(handles, labels, loc='lower center', ncol=7)
-        
-        # X 
+
+        # X
         ax[0].set_xlabel('')
         ax[1].set_xlabel('')
         # Y
@@ -399,28 +418,50 @@ class Visualizer():
         # Axis text
         fig.text(0.5, 0.1, 'Bar Width (m)', ha='center')
         fig.text(
-            0.04, 
-            0.5, 
-            'Channel Width (m)', 
-            va='center', 
+            0.04,
+            0.5,
+            'Channel Width (m)',
+            va='center',
             rotation='vertical'
         )
         # Save
         fig.savefig(out, format=fmt)
         plt.show()
 
+    def predicted_vs_actual(self, ms_df, bar_df, lit_df, ancient_df):
+        fig, axs = plt.subplots(1, 2, sharey=True, sharex=True)
+        xs = np.linspace(0, 10000, 10000)
+        axs[0].scatter(ms_df['predicted'], ms_df['mean_width'], c='gray')
+        axs[0].scatter(bar_df['predicted'], bar_df['mean_width'], c='black')
+        axs[0].plot(xs, xs, linestyle='--', c='black')
+        axs[0].set_yscale('log')
+        axs[0].set_xscale('log')
 
-if __name__ == '__main__':
-    xs = np.linspace(0, 1000, 10000)
-    y1 = xs**2
-    y2 = xs**4
-    plt.loglog(xs, y1)
-    plt.loglog(xs, y2)
-    
-#    plt.yscale('log')
-#    plt.xscale('log')
+        axs[1].scatter(
+            lit_df['predicted'],
+            lit_df['Channel Width'],
+            marker='^'
+        )
+        axs[1].scatter(
+            ancient_df['predicted'],
+            ancient_df['channel_width'],
+            marker='s'
+        )
 
-#    plt.xlim(.001, 400)
-#    plt.ylim(.001, 1200)
+        axs[1].plot(xs, xs, linestyle='--', c='black')
+        axs[1].set_yscale('log')
+        axs[1].set_xscale('log')
 
-    plt.show()
+        axs[0].set_xlim(10, 4000)
+        axs[0].set_ylim(10, 3000)
+
+        fig.text(0.5, 0.01, 'Predicted Channel Width (m)', ha='center')
+        fig.text(
+            0.04,
+            0.5,
+            'Channel Width (m)',
+            va='center',
+            rotation='vertical'
+        )
+
+        plt.show()

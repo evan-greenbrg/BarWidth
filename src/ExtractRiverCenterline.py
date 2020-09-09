@@ -3,16 +3,14 @@ import json
 from itertools import product
 
 import pandas
-import cv2
 import numpy
-from rivamap import preprocess, singularity_index, delineate, georef, visualization
+from rivamap import preprocess, singularity_index, delineate
 import geopandas as gpd
 from shapely.geometry import box
 import rasterio
 from rasterio.mask import mask
 from osgeo import gdal
 from fiona.crs import from_epsg
-from matplotlib import pyplot as plt
 
 
 def bounding_coordinates(ds):
@@ -75,20 +73,20 @@ def clip_raster(ipath, mask_path, epsg, opath):
 
 def get_centerline(B3, B6, size):
     """
-    Using RivaMap library finds the largest centerline from 
+    Using RivaMap library finds the largest centerline from
     Bands 3 and 6 lansat 8 imagery
     """
     I1 = preprocess.mndwi(B3, B6)
     filters = singularity_index.SingularityIndexFilters()
     psi, widthMap, orient = singularity_index.applyMMSI(I1, filters)
     nms = delineate.extractCenterlines(orient, psi)
-    
+
     return delineate.getBiggestCenterline(nms, size)
 
 
 def get_tiles(path, n):
     with rasterio.open(path) as inds:
-        # Get shape of image array 
+        # Get shape of image array
         ncols = inds.meta['width']
         nrows = inds.meta['height']
 
@@ -97,28 +95,29 @@ def get_tiles(path, n):
         height = nrows//n
 
         offsets = product(
-            range(0, ncols, width), 
+            range(0, ncols, width),
             range(0, nrows, height)
         )
 
         big_window = rasterio.windows.Window(
-            col_off=0, 
-            row_off=0, 
-            width=ncols, 
+            col_off=0,
+            row_off=0,
+            width=ncols,
             height=nrows
         )
 
-        for col_off, row_off in  offsets:
+        for col_off, row_off in offsets:
             window = rasterio.windows.Window(
-                col_off=col_off, 
-                row_off=row_off, 
-                width=width, 
+                col_off=col_off,
+                row_off=row_off,
+                width=width,
                 height=height
             ).intersection(big_window)
 
             transform = rasterio.windows.transform(window, inds.transform)
 
             yield window, transform
+
 
 DemPath = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/sacramento_merged_26910.tif'
 
@@ -163,34 +162,8 @@ for window, transform in get_tiles(B3out, 1):
             )
 
 oroot = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento'
-f = 'savramento_water_points.csv'
+f = 'sacramento_water_points.csv'
 outpath = os.path.join(oroot, f)
 
 coordinate_df = pandas.DataFrame(coordinates, columns=['lon', 'lat'])
 coordinate_df.to_csv(outpath)
-
-
-# Reproject to NAD83
-from RasterHandler import RasterHandler
-
-
-rh = RasterHandler()
-centerline_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/savramento_centerline.csv'
-
-iepsg = 26910
-oepsg = 4326 
-df = pandas.read_csv(centerline_path)
-df = df.iloc[::4, :]
-df = df.astype('float')
-lon = []
-lat = []
-for i, row in df.iterrows():
-    x, y = rh.transform_coordinates(row['lon'], row['lat'], iepsg, oepsg)
-    lat.append(x)
-    lon.append(y)
-
-df['lon_'] = lon
-df['lat_'] = lat
-
-out_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/savramento_centerline_4326.csv'
-df.to_csv(out_path)

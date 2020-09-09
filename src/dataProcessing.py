@@ -1,7 +1,5 @@
 import math
 import pandas
-from matplotlib import pyplot as plt
-import numpy as np
 
 
 def sample_bars(df, n):
@@ -30,7 +28,7 @@ def sample_sections(df, n):
 
 def get_downstream_distance(bargroup):
     """
-    Take UTM coordinates from bars dictionary and 
+    Take UTM coordinates from bars dictionary and
     converts to downstream distance
     """
     df = pandas.DataFrame()
@@ -73,10 +71,11 @@ def get_normalized(bargroup, widthcol):
     return df
 
 
+# Renaming some of the columns when I want standard deviations
 col_list = [
-    'channel_width_dem', 
-    'channel_width_water', 
-    'channel_width_mean', 
+    'channel_width_dem',
+    'channel_width_water',
+    'channel_width_mean',
     'bar_width'
 ]
 rename_list = {
@@ -86,8 +85,10 @@ rename_list = {
     'bar_width': 'bar_width_std'
 }
 
+# Number of samples to take
 n = 15
 m = 10
+
 # Red River
 red = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Red_River/bar_data.csv'
 red_df = pandas.read_csv(red)
@@ -96,7 +97,6 @@ red_df['bar_width'] = red_df['bar_width'].astype(float)
 red_df = red_df[red_df['bar_width'] > 0]
 red_df = get_downstream_distance(red_df.groupby('bar'))
 
-# Bar
 red_bar_mean = red_df.groupby('bar').mean()
 red_bar_mean = red_bar_mean[col_list]
 ns = [math.sqrt(x) for x in red_df.groupby('bar').count()['distance']]
@@ -115,7 +115,6 @@ trinity_df['bar_width'] = trinity_df['bar_width'].astype(float)
 trinity_df = trinity_df[trinity_df['bar_width'] > 0]
 trinity_df = get_downstream_distance(trinity_df.groupby('bar'))
 
-# Bars
 trinity_bar_mean = trinity_df.groupby('bar').mean()
 trinity_bar_mean = trinity_bar_mean[col_list]
 trinity_bar_std = trinity_df.groupby('bar').sem()
@@ -133,7 +132,6 @@ koyukuk_df['bar_width'] = koyukuk_df['bar_width'].astype(float)
 koyukuk_df = koyukuk_df[koyukuk_df['bar_width'] > 0]
 koyukuk_df = get_downstream_distance(koyukuk_df.groupby('bar'))
 
-# Bars
 koyukuk_bar_mean = koyukuk_df.groupby('bar').mean()
 koyukuk_bar_mean = koyukuk_bar_mean[col_list]
 koyukuk_bar_std = koyukuk_df.groupby('bar').sem()
@@ -149,7 +147,6 @@ platte_df = pandas.read_csv(platte)
 platte_df = platte_df[platte_df['bar_width'] > 0]
 platte_df_df = get_downstream_distance(platte_df.groupby('bar'))
 
-# Bars
 platte_bar_mean = platte_df.groupby('bar').mean()
 platte_bar_mean = platte_bar_mean[col_list]
 platte_bar_std = platte_df.groupby('bar').sem()
@@ -175,10 +172,10 @@ white_df = get_downstream_distance(white_df.groupby('bar'))
 
 # Convert white river to m
 to_change = [
-    'channel_width_dem', 
-    'channel_width_water', 
-    'bar_width', 
-    'bar_height', 
+    'channel_width_dem',
+    'channel_width_water',
+    'bar_width',
+    'bar_height',
 ]
 for change in to_change:
     white_df[change] = white_df[change] * 0.3048
@@ -200,7 +197,6 @@ powder_df['bar_width'] = powder_df['bar_width'].astype(float)
 powder_df = powder_df[powder_df['bar_width'] > 0]
 powder_df = get_downstream_distance(powder_df.groupby('bar'))
 
-# Bars
 powder_bar_mean = powder_df.groupby('bar').mean()
 powder_bar_mean = powder_bar_mean[col_list]
 powder_bar_std = powder_df.groupby('bar').sem()
@@ -217,7 +213,6 @@ miss_df['bar_width'] = miss_df['bar_width'].astype(float)
 miss_df = miss_df[miss_df['bar_width'] > 0]
 miss_df = get_downstream_distance(miss_df.groupby('bar'))
 
-# Bars
 miss_bar_mean = miss_df.groupby('bar').mean()
 miss_bar_mean = miss_bar_mean[col_list]
 miss_bar_std = miss_df.groupby('bar').sem()
@@ -235,7 +230,6 @@ miss1_df['bar_width'] = miss1_df['bar_width'].astype(float)
 miss1_df = miss1_df[miss1_df['bar_width'] > 0]
 miss1_df = get_downstream_distance(miss1_df.groupby('bar'))
 
-# Bars
 miss1_bar_mean = miss1_df.groupby('bar').mean()
 miss1_bar_mean = miss1_bar_mean[col_list]
 miss1_bar_std = miss1_df.groupby('bar').sem()
@@ -253,7 +247,6 @@ brazos_df['bar_width'] = brazos_df['bar_width'].astype(float)
 brazos_df = brazos_df[brazos_df['bar_width'] > 0]
 brazos_df = get_downstream_distance(brazos_df.groupby('bar'))
 
-# Bars
 brazos_bar_mean = brazos_df.groupby('bar').mean()
 brazos_bar_mean = brazos_bar_mean[col_list]
 brazos_bar_std = brazos_df.groupby('bar').sem()
@@ -263,7 +256,7 @@ brazos_bars = brazos_bar_mean.merge(brazos_bar_std, on='bar')
 brazos_df_sample = sample_sections(brazos_df, n)
 brazos_df_bsample = brazos_bars
 
-# Tombigbee 
+# Tombigbee
 tombigbee = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Tombigbee/bar_data.csv'
 tom_df = pandas.read_csv(tombigbee)
 tom_df = tom_df[tom_df['bar_width'] != 'False']
@@ -271,7 +264,6 @@ tom_df['bar_width'] = tom_df['bar_width'].astype(float)
 tom_df = tom_df[tom_df['bar_width'] > 0]
 tom_df = get_downstream_distance(tom_df.groupby('bar'))
 
-# Bars
 tom_bar_mean = tom_df.groupby('bar').mean()
 tom_bar_mean = tom_bar_mean[col_list]
 tom_bar_std = tom_df.groupby('bar').sem()
@@ -281,7 +273,7 @@ tom_bars = tom_bar_mean.merge(tom_bar_std, on='bar')
 tom_df_sample = sample_sections(tom_df, n)
 tom_df_bsample = tom_bars
 
-# Rio Grande TX 
+# Rio Grande TX
 rio = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Rio_Grande_TX/bar_data.csv'
 rio_df = pandas.read_csv(rio)
 rio_df = rio_df[rio_df['bar_width'] != 'False']
@@ -289,7 +281,6 @@ rio_df['bar_width'] = rio_df['bar_width'].astype(float)
 rio_df = rio_df[rio_df['bar_width'] > 0]
 rio_df = get_downstream_distance(rio_df.groupby('bar'))
 
-# Bars
 rio_bar_mean = rio_df.groupby('bar').mean()
 rio_bar_mean = rio_bar_mean[col_list]
 rio_bar_std = rio_df.groupby('bar').sem()
@@ -299,7 +290,7 @@ rio_bars = rio_bar_mean.merge(rio_bar_std, on='bar')
 rio_df_sample = sample_sections(rio_df, n)
 rio_df_bsample = sample_bars(rio_bars, m)
 
-# Sacramento 
+# Sacramento
 sac = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Sacramento/bar_data.csv'
 sac_df = pandas.read_csv(sac)
 sac_df = sac_df[sac_df['bar_width'] != 'False']
@@ -307,7 +298,6 @@ sac_df['bar_width'] = sac_df['bar_width'].astype(float)
 sac_df = sac_df[sac_df['bar_width'] > 0]
 sac_df = get_downstream_distance(sac_df.groupby('bar'))
 
-# Bars
 sac_bar_mean = sac_df.groupby('bar').mean()
 sac_bar_mean = sac_bar_mean[col_list]
 sac_bar_std = sac_df.groupby('bar').sem()
@@ -325,7 +315,6 @@ bev_df['bar_width'] = bev_df['bar_width'].astype(float)
 bev_df = bev_df[bev_df['bar_width'] > 0]
 bev_df = get_downstream_distance(bev_df.groupby('bar'))
 
-# Bars
 bev_bar_mean = bev_df.groupby('bar').mean()
 bev_bar_mean = bev_bar_mean[col_list]
 bev_bar_std = bev_df.groupby('bar').sem()

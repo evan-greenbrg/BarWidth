@@ -1,6 +1,5 @@
 from matplotlib import pyplot as plt
 from matplotlib.widgets import Button
-import rasterio
 import numpy as np
 
 
@@ -9,11 +8,11 @@ Y = []
 TESTDEM = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Powder_River/output_be_26913.tif'
 
 
-def closest(lst, K): 
+def closest(lst, K):
     """
     Finds the closest value in list
     """
-    return lst[min(range(len(lst)), key = lambda i: abs(lst[i]-K))] 
+    return lst[min(range(len(lst)), key=lambda i: abs(lst[i] - K))]
 
 
 class WidthPicker(object):
@@ -24,8 +23,9 @@ class WidthPicker(object):
 
     def __init__(self, ax):
         self.ax = ax
-        self.annotation = ax.annotate(self.text_template, 
-                xy=(self.x, self.y), xytext=(self.xoffset, self.yoffset), 
+        self.annotation = ax.annotate(
+                self.text_template,
+                xy=(self.x, self.y), xytext=(self.xoffset, self.yoffset),
                 textcoords='offset points', ha='right', va='bottom',
                 bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.5),
                 arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0')
@@ -44,7 +44,7 @@ class WidthPicker(object):
             event.canvas.draw()
         self.mouseX.append(self.x)
         self.mouseY.append(self.y)
-        
+
         if len(self.mouseX) >= 2:
             plt.close('all')
 
@@ -58,11 +58,11 @@ class BarPicker(object):
     def __init__(self, ax, xaxis, yaxis):
         self.ax = ax
         self.annotation = ax.annotate(
-            self.text_template, 
-            xy=(self.x, self.y), 
-            xytext=(self.xoffset, self.yoffset), 
-            textcoords='offset points', 
-            ha='right', 
+            self.text_template,
+            xy=(self.x, self.y),
+            xytext=(self.xoffset, self.yoffset),
+            textcoords='offset points',
+            ha='right',
             va='bottom',
             bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.5),
             arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0')
@@ -91,14 +91,14 @@ class BarPicker(object):
         self.rsquared = -99
         plt.close('all')
 
-    def sigmoid(self, x, L ,x0, k):
+    def sigmoid(self, x, L, x0, k):
         y = L / (1 + np.exp(-k*(x-x0)))
         return (y)
 
     def draw_bar(self, event):
         # Get positions from plot call
         L = max(self.LsY) - min(self.LsY)
-        x0 = np.average(self.LsX) 
+        x0 = np.average(self.LsX)
 
         # Find the slope at x0
         close_x0 = closest(self.xaxis, x0)
@@ -119,10 +119,10 @@ class BarPicker(object):
             closest(self.yaxis, self.LsY[0]),
             closest(self.yaxis, self.LsY[1])
         ]
-        
+
         # Get slope and fit k
         dydx = (
-            (close_ys[maxi] - close_ys[mini]) 
+            (close_ys[maxi] - close_ys[mini])
             / (close_xs[maxi] - close_xs[mini])
         )
         k = (4 * dydx) / L
@@ -131,7 +131,7 @@ class BarPicker(object):
         self.popt = [L, x0, k]
 
         self.barln, = self.ax.plot(
-            self.xaxis, 
+            self.xaxis,
             self.sigmoid(self.xaxis, *self.popt)
         )
         plt.draw()

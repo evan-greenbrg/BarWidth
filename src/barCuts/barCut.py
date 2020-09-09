@@ -1,14 +1,6 @@
-import argparse
-import errno
 import random
-import os
 import sys
 import math
-from yaml import load
-try:
-    from yaml import CLoader as Loader
-except ImportError:
-    from yaml import Loader
 
 import gdal
 import osr
@@ -16,12 +8,11 @@ import numpy as np
 import pandas
 from pyproj import Proj
 from matplotlib import pyplot as plt
-from scipy import spatial 
+from scipy import spatial
 
 from BarHandler import BarHandler
 from RasterHandler import RasterHandler
 from RiverHandler import RiverHandler
-from PointPicker import WidthPicker
 
 STEP = None
 MIN_RSQUARE = 0.05
@@ -61,7 +52,7 @@ def get_direction(coordinates, idx):
 
 
 def angle_between(v1, v2):
-    """ 
+    """
     Returns the angle in radians between vectors 'v1' and 'v2'
     """
 #    v1_u = unit_vector(v1)
@@ -69,6 +60,8 @@ def angle_between(v1, v2):
 
     return np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0))
 
+
+# Load Parameters directly
 param = {
     'DEMpath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/barCut/trinityDEM_clip_26915.tif',
     'CenterlinePath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/barCut/trinityCenterline_4326.csv',
@@ -162,23 +155,22 @@ if STEP:
 if len(coordinates) == 0:
     sys.exit("No coordinates")
 
-######################################################
-########   This is the primary sampling
-######################################################
+# This is the primary sampling
 bar_data_df = pandas.DataFrame()
 finn = 25
 n = 10
+
 # 1 - 1:10
 start = 0
 stop = 10
 for theta in range(start, stop):
     scoordinates = pandas.DataFrame(columns=[
-        'lon', 
-        'lat', 
-        'easting', 
-        'northing', 
-        'dlon', 
-        'dlat', 
+        'lon',
+        'lat',
+        'easting',
+        'northing',
+        'dlon',
+        'dlat',
         'dlon_inv',
         'dlat_inv',
         'dlon_cut',
@@ -194,19 +186,14 @@ for theta in range(start, stop):
 
         # Find vector at angle
         phi = math.degrees(math.atan(dlat_inv/dlon_inv))
-#        dlon_cut = math.cos(math.radians(phi - theta))
-#        dlat_cut = math.sin(math.radians(phi - theta))
-        dlon_cut = dlon_inv    # If I'm just down the normal cuts
-        dlat_cut = dlat_inv
 
-#       # Plot the angle
-#        origin = [0, 0], [0, 0] # origin point
-#        vinv = [dlon_inv, dlat_inv]
-#        vcut = [dlon_cut, dlat_cut]
-#        V = np.array([vinv, vcut])
-#        plt.quiver(*origin, V[:,0], V[:,1], color=['r','b'], scale=5)
-#        plt.title(theta)
-#        plt.show()
+        # If I want to look at the offset angles
+        dlon_cut = math.cos(math.radians(phi - theta))
+        dlat_cut = math.sin(math.radians(phi - theta))
+
+        # If I want to look at just the perpendicular cuts
+        # dlon_cut = dlon_inv
+        # dlat_cut = dlat_inv
 
         # Put it all together
         sample = coordinates.iloc[idx]
@@ -216,19 +203,21 @@ for theta in range(start, stop):
         sample['dlat_inv'] = dlat_inv
         sample['dlon_cut'] = dlon_cut
         sample['dlat_cut'] = dlat_cut
-        sample['theta'] = theta
-#        sample['angle'] = 0    # If I'm just doing the normal cuts
+        sample['theta'] = theta     # If I'm doing the offsets
+#        sample['angle'] = 0    # If I'm just doing the perpendicular cuts
 
         scoordinates = scoordinates.append(sample)
 
-    # Split into two dataframes. 
-    # This makes creating the cross sections easier
-    # I want to track botht the true width of the river 
-    # as well as the apparent bar width
+    # Split into two dataframes
+    """
+    This makes creating the cross sections easier
+    I want to track botht the true width of the river
+    as well as the apparent bar width
+    """
     true_coords = scoordinates.drop(columns=['dlon_cut', 'dlat_cut'])
     scoordinates = scoordinates.drop(columns=['dlon_inv', 'dlat_inv'])
     scoordinates = scoordinates.rename(columns={
-        'dlon_cut': 'dlon_inv', 
+        'dlon_cut': 'dlon_inv',
         'dlat_cut': 'dlat_inv'
     })
     print(scoordinates)
@@ -244,6 +233,7 @@ for theta in range(start, stop):
         ('water_section', 'object'),
     ]
     xsections = np.array([], dtype=types)
+
     # Iterate through each coordinate of the channel centerline
     for idx, row in scoordinates.iterrows():
         # Get the cross-section and set-up numpy stucture
@@ -254,7 +244,7 @@ for theta in range(start, stop):
                     None,
                     None,
                     None,
-                    # Perpendicular Cross-Section
+                    # Elevation Cross-Section
                     rh.get_xsection(
                         row,
                         dem,
@@ -263,7 +253,7 @@ for theta in range(start, stop):
                         dem_transform['pixelWidth'],
                         dem_transform['pixelHeight'],
                         int(
-                            param['SectionLength'] 
+                            param['SectionLength']
                             * 2 * (1 + abs(row['theta']/180))
                         ),
                         dem_transform['xstep'],
@@ -313,13 +303,13 @@ for theta in range(start, stop):
     for idx in range(0, len(xsections), param['step']):
         # Finds the channel width and associated points
         if param['mannual']:
-            banks, dem_width, dem_points = riv.mannual_find_channel_width(
+            dem_width, dem_points = riv.mannual_find_channel_width(
                 idx,
                 xsections[idx]['elev_section']
             )
             plt.close('all')
         else:
-            banks, dem_width, dem_points = riv.find_channel_width(
+            dem_width, dem_points = riv.find_channel_width(
                 xsections[idx]['elev_section'],
                 xsections[idx]['elev_section'],
                 order=param['WidthSens']
@@ -336,30 +326,19 @@ for theta in range(start, stop):
             water_width = None
             water_points = None
 
-        # If the program found channel banks will construct banks dataframe
-        if banks:
-            bank_df = bank_df.append(riv.get_bank_positions(
-                xsections[idx]['elev_section'],
-                dem_points,
-                water_points
-            ))
-
         # Save width values to the major cross-section structure
-        xsections[idx]['bank'] = banks
         xsections[idx]['dem_width'] = dem_width
         xsections[idx]['water_width'] = water_width
 
         # If there is a step, fill the rest of the values
         if param['step'] > 1:
             if idx != len(xsections) - 1:
-                for j in range(param['step'] -1):
+                for j in range(param['step'] - 1):
                     if idx + j > len(xsections) - 1:
                         break
-                    xsections[idx + j]['bank'] = banks
                     xsections[idx + j]['dem_width'] = dem_width
                     xsections[idx + j]['water_width'] = water_width
 
-    # Get that bar data
     # Get Proj String
     ds = gdal.Open(param['DEMpath'], 0)
     ProjStr = "epsg:{0}".format(
@@ -371,10 +350,7 @@ for theta in range(start, stop):
 
     # Initialize BarHandler
     rh = RasterHandler()
-    bh = BarHandler(
-        xsections[0]['coords'][0],
-        xsections[0]['coords'][1]
-    )
+    bh = BarHandler()
 
     # Read in the bar file to find the channel bars
     print('Loading Bar .csv file')
@@ -435,7 +411,7 @@ for theta in range(start, stop):
             )
         else:
             # interpolate profile down
-            if param['interpolate'] == True:
+            if param['interpolate']:
                 section = bh.interpolate_down(
                     param.get('depth'),
                     section
@@ -443,7 +419,7 @@ for theta in range(start, stop):
 
             # Find the minimum and shift the cross-section
             section = bh.shift_cross_section_down(
-                section, 
+                section,
             )
 
             popt, rsquared = bh.mannual_fit_bar(section)
@@ -504,7 +480,7 @@ for theta in range(start, stop):
             )
 
             try:
-               water_width = int(section['water_width'])
+                water_width = int(section['water_width'])
             except:
                 water_width = int(section['dem_width'])
 
@@ -525,7 +501,10 @@ for theta in range(start, stop):
     data = pandas.DataFrame(bar_data)
     bar_data_df = bar_data_df.append(data)
     bar_data_df['sample'] = str(n)
-    bar_data_df['ratio'] = bar_data_df['channel_width_mean'] / bar_data_df['bar_width']
+    bar_data_df['ratio'] = (
+        bar_data_df['channel_width_mean']
+        / bar_data_df['bar_width']
+    )
 
-# bar_data_df.to_csv('barCuts/angle_data/angle_{}_{}.csv'.format(start, stop-1))
-bar_data_df.to_csv('barCuts/angle_data/norm.csv')
+# Save the angles you ran
+bar_data_df.to_csv('barCuts/angle_data/angle_{}_{}.csv'.format(start, stop-1))

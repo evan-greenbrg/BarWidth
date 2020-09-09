@@ -66,5 +66,4 @@ plt.ylabel('Channel Width / Bar Surface Width')
 plt.yticks(np.arange(0, 44, 4.0))
 plt.legend(['Oblique Cross-Sections', 'Normal Cross-Sections'])
 
-fig2.savefig('/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/figures/63020bar_cut_samples.svg', format='svg')
 plt.show()
