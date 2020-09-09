@@ -19,7 +19,7 @@ from RasterHandler import RasterHandler
 from RiverHandler import RiverHandler
 
 # If you don't want to sample all of the centerline points
-STEP = 300
+STEP = 5
 
 
 def main():
@@ -52,8 +52,9 @@ def main():
         raise NameError('No Output root given')
     if not param.get('SectionLength'):
         raise NameError('No section length given')
-    if not param.get('mannual'):
-        raise NameError('No given mannual or automatic direction')
+    if not param.get('manual'):
+        param['manual'] = True
+#        raise NameError('No given manual or automatic direction')
 
     # Initialize classes, objects, get ProjStr
     riv = RiverHandler()
@@ -191,6 +192,7 @@ def main():
         )
         xsections = np.append(xsections, section)
 
+    print(len(xsections))
     # Smooth Cross Sections
     print('Smoothing Cross-Sections')
     for idx, section in np.ndenumerate(xsections):
@@ -216,7 +218,7 @@ def main():
     # Iterate through exsections to find widths
     for idx in range(0, len(xsections), 1):
         # Finds the channel width and associated points
-        if param['mannual']:
+        if param['manual']:
             dem_width, dem_points = riv.mannual_find_channel_width(
                 idx,
                 xsections[idx]['elev_section']

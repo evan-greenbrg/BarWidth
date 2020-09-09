@@ -13,7 +13,6 @@ def closest(lst, K):
     """
     Finds the closest value in list to value, K
     """
-
     return lst[min(range(len(lst)), key=lambda i: abs(lst[i]-K))]
 
 
@@ -448,6 +447,7 @@ class BarHandler():
         # Get banks
         banks = np.copy(section['bank'])
 
+        print(banks)
         # Get banks-closest
         bank0_closest = closest(elev['distance'], banks[0])
         bank1_closest = closest(elev['distance'], banks[1])
