@@ -12,29 +12,14 @@ import osr
 import numpy as np
 import pandas
 from pyproj import Proj
-from matplotlib import pyplot as plt
 
 from BarHandler import BarHandler
-from RasterHandler import RasterHandler
 
 
 MIN_RSQUARE = 0.05
 BAR_PARAM_FN = 'bar_parameters.csv'
 BAR_DATA_FN = 'bar_data.csv'
 RSQUARE_FN = 'rsquared_dataframe.csv'
-
-test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi_Leclair/barParams.yaml'
-with open(test_path, "r") as f:
-    input_param = load(f, Loader=Loader)
-
-input_param['interpolate'] = True
-input_param['mannual'] = True
-input_param['depth'] = 30
-
-
-def sigmoid(x, L ,x0, k):
-    y = L / (1 + np.exp(-k*(x-x0)))
-    return (y)
 
 
 def main():
@@ -56,6 +41,14 @@ def main():
     if not os.path.exists(input_param['demPath']):
         raise FileNotFoundError(
             errno.ENOENT, os.strerror(errno.ENOENT), input_param['demPath'])
+    if not input_param.get('depth'):
+        raise NameError('No depth given')
+    if not input_param.get('interpolate'):
+        raise NameError('No interpolation direction given')
+    if not input_param.get('mannual'):
+        raise NameError('No mannual or automatic direction given given')
+    if not input_param.get('outputRoot'):
+        raise NameError('No output root given')
 
     # Load xsections and coordinates
     xsections = np.load(input_param['xPath'], allow_pickle=True)
@@ -71,35 +64,25 @@ def main():
     myProj = Proj(ProjStr)
 
     # Initialize BarHandler
-    rh = RasterHandler()
-    bh = BarHandler(
-        xsections[0]['coords'][0],
-        xsections[0]['coords'][1]
-    )
+    bh = BarHandler()
 
     # Read in the bar file to find the channel bars
     print('Loading Bar .csv file')
     bar_df = pandas.read_csv(
         input_param['barPath'],
-        names=['Latitude_us', 'Longitude_us', 'Latitude_ds', 'Longitude_ds'],
+        names=[
+            'Latitude_us',
+            'Longitude_us',
+            'Latitude_ds',
+            'Longitude_ds'
+        ],
         header=1
     )
     # Convert the Bar Lat Long to UTM Easting Northing
     print('Converting Bar Coordinates to Easting Northing')
     bar_df = bh.convert_bar_to_utm(myProj, bar_df)
 
-    # Find the bar coords within the DEM
-#    print('Find Bars within the DEM')
-#    bar_df = rh.coordinates_in_dem(
-#        bar_df,
-#        ds,
-#        ('upstream_easting', 'upstream_northing')
-#    )
-#    bar_df = rh.coordinates_in_dem(
-#        bar_df,
-#        ds,
-#        ('downstream_easting', 'downstream_northing')
-#    )
+    # unpersist gdal object
     ds = None
 
     # Make structure that contains the sections for each bar
@@ -114,7 +97,7 @@ def main():
         print(len(sections))
         bar_sections[str(idx)] = sections
 
-    # Save the parameters
+    # Initialize the parameters
     parameters = {
         'bar': [],
         'idx': [],
@@ -138,7 +121,6 @@ def main():
     ]
 
     # Make the dataframe that will keep track of the R-Squared
-#    rsquared_df = pandas.DataFrame(columns=['bar', 'idx', 'r2'])
     rsquared_di = {
         'bar': [],
         'idx': [],
@@ -177,49 +159,47 @@ def main():
                 filtered += 1
             else:
                 # interpolate profile down
-                if input_param['interpolate'] == True:
-                    try:
-                        section = bh.interpolate_down(
-                            input_param.get('depth'),
-                            section
-                        )
-                    except:
-                        continue
+                if input_param['interpolate']:
+                    section = bh.interpolate_down(
+                        input_param.get('depth'),
+                        section
+                    )
 
                 # Find the minimum and shift the cross-section
                 section = bh.shift_cross_section_down(
-                    section, 
+                    section,
                 )
 
                 if input_param['mannual']:
-                    popt, rsquared = bh.mannual_fit_bar(section)
+                    # Find the sigmoid equation
+                    popt = bh.mannual_fit_bar(section)
+
+                    # Find the r-squared
+#                    rsquared = bh.get_r_squared(section, banks, popt)
+                    rsquared = 1
 
                 else:
                     # Find the side of the channel with the bar
                     banks = bh.find_bar_side(section['bank'])
 
-                    # Flip cross-sections so they are all facing the same way
+                    # Flip cross-sections so they are facing the same way
                     section, banks = bh.flip_bars(section, banks)
 
-                    # Find the distance for maximum slope and the maximum slope
+                    # Find x for maximum slope and maximum slope value
                     x0, dydx = bh.find_maximum_slope(
                         section['elev_section'],
                         banks
                     )
-
                     # Fit sigmoid parameters
                     popt = bh.fit_sigmoid_parameters(
-                        section, 
-                        banks, 
-                        x0, 
+                        section,
+                        banks,
+                        x0,
                         dydx
                     )
 
                     # Get the R-Squared
                     rsquared = bh.get_r_squared(section, banks, popt)
-                    print('Rsquared')
-                    print(rsquared)
-                    print('\n')
 
                 # Filter based on R-squared value
                 if (rsquared < MIN_RSQUARE):

@@ -17,19 +17,10 @@ from matplotlib import pyplot as plt
 
 from RasterHandler import RasterHandler
 from RiverHandler import RiverHandler
-from PointPicker import WidthPicker
 
+# If you don't want to sample all of the centerline points
+STEP = 5
 
-STEP = 3
-
-test_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi/sectionParams.yaml'
-with open(test_path, "r") as f:
-    param = load(f, Loader=Loader)
-
-param['SectionSmoothing'] = 15
-# param['SectionLength'] = 300
-param['manual'] = True
-param['step'] = 1
 
 def main():
 
@@ -55,6 +46,15 @@ def main():
             os.strerror(errno.ENOENT),
             param['esaPath']
         )
+    if not param.get('CenterlineSmoothing'):
+        raise NameError('No Centerline Smoothing Parameter given')
+    if not param.get('OutputRoot'):
+        raise NameError('No Output root given')
+    if not param.get('SectionLength'):
+        raise NameError('No section length given')
+    if not param.get('manual'):
+        param['manual'] = True
+#        raise NameError('No given manual or automatic direction')
 
     # Initialize classes, objects, get ProjStr
     riv = RiverHandler()
@@ -97,6 +97,7 @@ def main():
         )
         coord_transform = coord_transform.append(df)
 
+    # Save the full coordinate dataframe
     coordinates = coord_transform.reset_index(drop=True)
 
     # Loading DEM data and metadata
@@ -125,13 +126,6 @@ def main():
     water_transform['xstep'], water_transform['ystep'] = rh.get_pixel_size(
         param['DEMpath']
     )
-
-    # Find what portion of centerline is within the DEM
-#    coordinates = rh.coordinates_in_dem(
-#        coordinates,
-#        ds,
-#        ('easting', 'northing')
-#    )
 
     # Downsample if you want
     if STEP:
@@ -198,6 +192,7 @@ def main():
         )
         xsections = np.append(xsections, section)
 
+    print(len(xsections))
     # Smooth Cross Sections
     print('Smoothing Cross-Sections')
     for idx, section in np.ndenumerate(xsections):
@@ -221,10 +216,10 @@ def main():
     )
 
     # Iterate through exsections to find widths
-    for idx in range(0, len(xsections), param['step']):
+    for idx in range(0, len(xsections), 1):
         # Finds the channel width and associated points
         if param['manual']:
-            banks, dem_width, dem_points = riv.mannual_find_channel_width(
+            dem_width, dem_points = riv.mannual_find_channel_width(
                 idx,
                 xsections[idx]['elev_section']
             )
@@ -233,7 +228,7 @@ def main():
             banks, dem_width, dem_points = riv.find_channel_width(
                 xsections[idx]['elev_section'],
                 xsections[idx]['elev_section'],
-                order=param['WidthSens']
+                order=param.get('WidthSens')
             )
         if len(
             xsections[idx]['water_section'][
@@ -248,7 +243,7 @@ def main():
             water_points = None
 
         # If the program found channel banks will construct banks dataframe
-        if banks:
+        if dem_points:
             bank_df = bank_df.append(riv.get_bank_positions(
                 xsections[idx]['elev_section'],
                 dem_points,
@@ -256,19 +251,9 @@ def main():
             ))
 
         # Save width values to the major cross-section structure
-        xsections[idx]['bank'] = banks
+        xsections[idx]['bank'] = dem_points
         xsections[idx]['dem_width'] = dem_width
         xsections[idx]['water_width'] = water_width
-
-        # If there is a step, fill the rest of the values
-        if param['step'] > 1:
-            if idx != len(xsections) - 1:
-                for j in range(param['step'] -1):
-                    if idx + j > len(xsections) - 1:
-                        break
-                    xsections[idx + j]['bank'] = banks
-                    xsections[idx + j]['dem_width'] = dem_width
-                    xsections[idx + j]['water_width'] = water_width
 
     # Save the Channel Cross Sections Structure
     print('Saving Cross-Section Structure')

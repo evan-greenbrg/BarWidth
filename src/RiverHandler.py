@@ -1,19 +1,12 @@
 import math
-import cv2
-import gdal
+
+from matplotlib import pyplot as plt
 import numpy as np
 import pandas
-from pyproj import Proj
-from rivamap import preprocess, singularity_index, delineate, georef, visualization
-import rasterio
-from rasterio.plot import show
 from scipy.signal import argrelextrema
-from scipy.ndimage import label as ndlabel
-from scipy.ndimage import sum as ndsum
-from scipy import spatial 
-from matplotlib import pyplot as plt
+from scipy import spatial
+from rivamap import georef
 
-from RasterHandler import RasterHandler
 from PointPicker import WidthPicker
 
 
@@ -21,18 +14,6 @@ class RiverHandler():
 
     def __init__(self):
         pass
-
-    def get_centerline(self, B3, B6, size):
-        """
-        Using RivaMap library finds the largest centerline from 
-        Bands 3 and 6 lansat 8 imagery
-        """
-        I1 = preprocess.mndwi(B3, B6)
-        filters = singularity_index.SingularityIndexFilters()
-        psi, widthMap, orient = singularity_index.applyMMSI(I1, filters)
-        nms = delineate.extractCenterlines(orient, psi)
-        
-        return delineate.getBiggestCenterline(nms, size)
 
     def get_river_coordinates(self, centerline, gm):
         """
@@ -45,9 +26,9 @@ class RiverHandler():
                 if value:
                     lat, lon = georef.pix2lonlat(gm, jdx, idx)
                     rowdf = pandas.DataFrame(
-		        data=[[lat, lon]],
-			columns=['lat', 'lon']
-		    )
+                        data=[[lat, lon]],
+                        columns=['lat', 'lon']
+                    )
                     river_coordinates = river_coordinates.append(rowdf)
 
         return river_coordinates
@@ -70,9 +51,9 @@ class RiverHandler():
                     n-1
                 )
                 neighbor_df = df.iloc[neighbors[0]]
-                x = list(neighbor_df.iloc[:,1])
+                x = list(neighbor_df.iloc[:, 1])
                 x.append(row[1])
-                y = list(neighbor_df.iloc[:,0])
+                y = list(neighbor_df.iloc[:, 0])
                 y.append(row[0])
 
                 xs.append(sum(x) / n)
@@ -89,13 +70,14 @@ class RiverHandler():
         from the raw DEM values
         """
         value = np.where(section['value'] < 0, None, section['value'])
-        d = {'distance': section['distance'], 'value': value} 
+        d = {'distance': section['distance'], 'value': value}
         df = pandas.DataFrame(data=d)
         df = df.fillna(False)
         values, distance = self.knn_smoothing(df, n=smoothing)
+
         # For values off the DEM, the value will be less than 0 -> set to False
         values = [
-            False if not x else False if x < 0 else x 
+            False if not x else False if x < 0 else x
             for x in values
         ]
 
@@ -154,7 +136,7 @@ class RiverHandler():
         coordinates['dlon'] = dlon
         coordinates['dlat'] = dlat
 
-        return coordinates 
+        return coordinates
 
     def get_inverse_direction(self, coordinates):
         """
@@ -168,15 +150,15 @@ class RiverHandler():
 
     def find_channel_width(self, section, order):
         """
-        Finds the endpoints of the channel from which the width will be 
+        Finds the endpoints of the channel from which the width will be
         calculated. Uses the biggest difference between adjeacent maxima and
         minima. It will then take the lowest of the two extremes (big->small
         and small-> big) and project across the stream. Project works because
         the reference frame of the model has the centerline as distance = 0
 
-        Outputs - 
+        Outputs -
         banks: list of tuple of two channel banks - used to find the bar
-        width: numeric channel width from bank top to bank top 
+        width: numeric channel width from bank top to bank top
         points: distance indexes of the channel bank tops
         """
         # Gets the channel geometry
@@ -186,7 +168,7 @@ class RiverHandler():
         # Add Step where I Optimize the channel Width
         data = {'distance': p, 'elevation': t}
         cross_section = pandas.DataFrame(
-            data=data, 
+            data=data,
             columns=['distance', 'elevation']
         )
 
@@ -197,7 +179,7 @@ class RiverHandler():
         minima = np.column_stack((p[mins], t[mins], np.full(len(t[mins]), 1)))
 
         extremes = np.concatenate([maxima, minima])
-        extremes = extremes[extremes[:,0].argsort()]
+        extremes = extremes[extremes[:, 0].argsort()]
 
         if len(extremes) == 0:
             print('No Channel Found')
@@ -208,7 +190,7 @@ class RiverHandler():
         for i in range(0, len(extremes)):
             minmax = extremes[i][2]
             if i == len(extremes) - 1:
-                d.append(0) 
+                d.append(0)
             elif extremes[i+1][2] == minmax:
                 d.append(0)
                 continue
@@ -225,9 +207,9 @@ class RiverHandler():
 
         # Save the banks for later
         banks = [
-            extremes[maxi + 1][0], 
+            extremes[maxi + 1][0],
             extremes[maxi][0],
-            extremes[mini][0], 
+            extremes[mini][0],
             extremes[mini + 1][0]
         ]
 
@@ -243,7 +225,7 @@ class RiverHandler():
         # Take lowest of the two and project across the stream
         if min_val[1] >= max_val[1]:
             opposite_channel_section = cross_section[
-                (cross_section['distance'] > min_val[0]) 
+                (cross_section['distance'] > min_val[0])
                 & (cross_section['distance'] < max_val[0])
                 & (cross_section['distance'] < 0)
             ]
@@ -251,7 +233,7 @@ class RiverHandler():
             banks[2] = None
         else:
             opposite_channel_section = cross_section[
-                (cross_section['distance'] > min_val[0]) 
+                (cross_section['distance'] > min_val[0])
                 & (cross_section['distance'] < max_val[0])
                 & (cross_section['distance'] > 0)
             ]
@@ -297,14 +279,14 @@ class RiverHandler():
         plt.title('{}: Pick positive Banks First'.format(idx))
         PP = WidthPicker(plt.gca())
         fig.canvas.mpl_connect('pick_event', PP)
-        one.set_picker(3)
+        one.set_picker(1)
         plt.show()
 
         print(PP.mouseX)
         print(PP.mouseY)
 
         banks = [x for x in PP.mouseX]
-        banks = [(banks[0], banks[1]), (banks[2], banks[3])]
+        banks = [(banks[0], banks[1])]
         points = (max(PP.mouseX), min(PP.mouseX))
 
         if points[0] < 0 or points[1] < 0:
@@ -315,46 +297,47 @@ class RiverHandler():
             else:
                 width = points[1] - points[0]
 
-        return banks, width, points
+        return width, points
 
     def find_channel_width_surface_water(self, section):
         """
-	Finds the channel width form the ESA surface watter occurence map
-	Uses a cross-section for the water occurence to find blocks of 
-	water occurence. Picks the most extreme of these (the channel)
-	and finds its width
-	
-	Inputs -
-	section: numpy structure of the elevation and water sections
+        Finds the channel width form the ESA surface watter occurence map
+        Uses a cross-section for the water occurence to find blocks of
+        water occurence. Picks the most extreme of these (the channel)
+        and finds its width
 
-	Outputs -
-	width: width of the channel in the units of the raster
-	points: distance indices of the channel end points
-	"""
-        dem = pandas.DataFrame(section['elev_section'])
+        Inputs -
+        section: numpy structure of the elevation and water sections
+
+        Outputs -
+        width: width of the channel in the units of the raster
+        points: distance indices of the channel end points
+        """
         water = pandas.DataFrame(section['water_section'])
 
         # 1. Shift the water values to the minimum non-zero value
         if water['value'].max() == water['value'].median():
             minv = 0.1
         else:
-            minv = min(water['value'][water['value'] > water['value'].median()])
+            minv = min(
+                water['value'][water['value'] > water['value'].median()]
+            )
 
         min_df = water[water['value'] <= minv]
-        
+
         if len(min_df) == 0 or min_df['value'].max() == 0:
             return None, None
-        
+
         # 2. Find blocks of positive water (closest to the origin)
         mins_list = list(min_df['distance'][
             (min_df['distance'] == min(
                 min_df['distance'][min_df['distance'] > 0], key=abs
-            )) 
+            ))
             | (min_df['distance'] == min(
                 min_df['distance'][min_df['distance'] < 0], key=abs
             ))
         ].index)
-        
+
         # 3. Set all the blocks to maximum/median value
         for i, val in enumerate(mins_list):
             if i == len(mins_list) - 1:
@@ -362,14 +345,14 @@ class RiverHandler():
             else:
                 minv = min(mins_list[i], mins_list[i + 1])
                 maxv = max(mins_list[i], mins_list[i + 1])
-        
+
                 water['value'][minv:maxv] = water['value'][minv:maxv].max()
-        
+
         # 4. Find the dydxs to demarcate width
         water['diff'] = water['value'].rolling(
                 window=5, center=True
         ).apply(lambda x: x.iloc[1] - x.iloc[0])
-        
+
         # 5. Find max and min diff
         max_slopes = water[water['diff'] == water['diff'].max()]['distance']
         min_slopes = water[water['diff'] == water['diff'].min()]['distance']
@@ -384,21 +367,21 @@ class RiverHandler():
 
     def get_bank_positions(self, xsection, dem_points, water_points):
         """
-        Takes the points from the channel_widths and turns them into a 
+        Takes the points from the channel_widths and turns them into a
         dataframe to save all of the channel banks for output
-        
-        Inputs - 
+
+        Inputs -
         xsection: Numpy structure of the cross-section
         points: Distance indexes for the channel margins
-        
+
         Outputs -
         Pandas Dataframe: dataframe with easting and northing points of
-        	channel banks
+                            channel banks
         """
-        def closest(lst, K): 
-            return lst[min(range(len(lst)), key = lambda i: abs(lst[i]-K))] 
+        def closest(lst, K):
+            return lst[min(range(len(lst)), key=lambda i: abs(lst[i]-K))]
 
-        # Find all of the 
+        # Find all of the
         dem0_closest = closest(xsection['distance'], dem_points[0])
         dem1_closest = closest(xsection['distance'], dem_points[1])
 
@@ -408,16 +391,16 @@ class RiverHandler():
 
         # Get the data for one side
         dem_bank = xsection[
-            xsection['distance'] == dem0_closest 
+            xsection['distance'] == dem0_closest
         ]
         dem_loc = [dem_bank['easting'], dem_bank['northing']]
 
         if len(dem_bank) == 0:
             return pandas.DataFrame(
                 {
-                    'dem_easting': None, 
-                    'dem_northing': None, 
-                    'water_easting': None, 
+                    'dem_easting': None,
+                    'dem_northing': None,
+                    'water_easting': None,
                     'water_northing': None
                 }, index=[0])
 
@@ -436,7 +419,7 @@ class RiverHandler():
             dem_loc,
             water_loc
         )
-        
+
         # Get the data for the other side
         dem_bank = xsection[
             xsection['distance'] == dem1_closest
@@ -455,19 +438,19 @@ class RiverHandler():
             dem_loc,
             water_loc
         )
-        
+
         data = np.vstack((data0, data1)).astype('float')
-        
+
         return pandas.DataFrame(
-            data, 
+            data,
             columns=[
-                'dem_easting', 
-                'dem_northing', 
-                'water_easting', 
+                'dem_easting',
+                'dem_northing',
+                'water_easting',
                 'water_northing'
             ]
         )
-    
+
     def save_channel_widths(self, xsections):
         """
         Takes the major cross-section structure and parses out the
@@ -494,11 +477,11 @@ class RiverHandler():
 
         # Save as pandas dataframe
         data = {
-            'easting': eastings, 
-            'northing': northings, 
+            'easting': eastings,
+            'northing': northings,
             'dem_width': dem_widths,
             'water_width': water_widths
         }
         width_df = pandas.DataFrame(data=data)
-        
+
         return width_df.reset_index()

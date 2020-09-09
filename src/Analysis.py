@@ -20,11 +20,12 @@ def posterior_distribution(X, y, N, fit_intercept=True, fit_slope=True):
         # sd = 25
 
         # Slope
-        slope = pm.Normal('slope', mu=float(2*reg.coef_), sd=1)
+        slope = pm.Normal('slope', mu=float(reg.coef_), sd=1000)
+#        slope = pm.Normal('slope', mu=0, sd=.0001)
         # sd = 1
 
         # Standard Deviation
-        sigma = pm.HalfNormal('sigma', sd=1)
+        sigma = pm.HalfNormal('sigma', sd=1000)
         # sd = 25
 
         # Estimate of Mean
@@ -64,8 +65,11 @@ bar_df = pandas.read_csv(bars_f)
 ms_df = pandas.read_csv(all_f)
 
 # Get Rid of Platte
-bar_df = bar_df[bar_df.river!='Platte River']
+# bar_df = bar_df[bar_df.river!='Platte River']
 ms_df = ms_df[ms_df.river!='Platte River']
+
+# ms_df['river-bar'] = ms_df['river'] + '_'+ bars 
+# bar_df = ms_df.groupby(['river', 'bar']).mean()
 
 # Get rid of tombigbee
 # bar_df = bar_df[bar_df.river!='Tombigbee River']
@@ -84,7 +88,9 @@ bar_df = bar_df[[
     'bar', 
     'channel_width_dem', 
     'channel_width_water', 
-    'bar_width'
+    'bar_width',
+    'bar_width_std',
+    'channel_width_mean_std'
 ]]
 ms_df = ms_df[[
     'river',
@@ -126,7 +132,7 @@ reach_df['log_water_width'] = np.log10(reach_df['channel_width_water'])
 
 # Ms_df
 
-log = True
+log = False
 if log == True:
     Xms = ms_df.loc[:, 'log_bar_width']
     yms = {
@@ -174,8 +180,8 @@ else:
         'mean': reach_df.loc[:, 'mean_width'],
     }
 
-fit_intercept = True
-fit_slope = False
+fit_intercept = False
+fit_slope = True 
 # ms df trace
 trace_ms = {}
 for key, value in yms.items():
@@ -213,7 +219,7 @@ for key, value in yreach.items():
 ms_coefs = {}
 for key, value in trace_ms.items():
     ms_coefs[key] = {
-        '5': 10**np.quantile(value['slope'], 0.05),
+        '5': np.quantile(value['slope'], 0.05),
         '50': np.quantile(value['slope'], 0.5),
         '95': np.quantile(value['slope'], 0.95)
     }
@@ -256,6 +262,7 @@ for key, value in trace_reach.items():
     }
 
 # Group by river
+ms_group = ms_df.groupby(['river', 'bar'])
 group_river = ms_df.groupby('river')
 group_bar = bar_df.groupby('river')
 
@@ -275,18 +282,19 @@ lit_df = pandas.read_csv(lit_path)
 
 vh.data_figure(
     outpath,
+    ms_df,
     group_river,
     group_bar,
     lit_df,
-    median_size=5,
+    median_size=15,
     alpha=0.25,
     density_size=35,
-#    bar_coefs=bar_coefs,
-#    reach_coefs=reach_coefs,
-    bar_intercept=bar_intercept,
-    reach_intercept=reach_intercept,
+    bar_coefs=bar_coefs,
+    reach_coefs=reach_coefs,
+#    bar_intercept=bar_intercept,
+#    reach_intercept=reach_intercept,
     fmt='svg',
-    log=True
+    log=False
 )
 
 
@@ -322,40 +330,61 @@ r2_df = pandas.DataFrame(data={
 
 i = '50'
 s = '50'
-log = True
-# Log
-if log:
-    if fit_slope:
-        reach_df['predicted'] = (
-            bar_intercept['mean'][i] 
-            * 10**(reach_df['log_bar_width'])**bar_coefs['mean'][s])
-        )
-        bar_df['predicted'] = (
-            bar_intercept['mean'][i] 
-            * 10**(bar_df['log_bar_width'])**bar_coefs['mean'][s])
-        )
-    else:
-        reach_df['predicted'] = (
-            bar_intercept['mean'][i] 
-            * 10**(reach_df['log_bar_width'])
-        )
-        bar_df['predicted'] = (
-            bar_intercept['mean'][i] 
-            * 10**(bar_df['log_bar_width'])
-        )
-else:
+
 #    Normal
-    reach_df['predicted'] = (
-        reach_df['bar_width']*bar_coefs['mean'][s]
-    )
-    bar_df['predicted'] = (
-        bar_df['bar_width']*bar_coefs['mean'][s]
-    )
+ms_df['predicted'] = (
+    ms_df['bar_width']*ms_coefs['mean'][s]
+)
+ms_df['predicted_er'] = (
+    ms_df['bar_width']*(ms_coefs['mean']['50'] - ms_coefs['mean']['5'])
+)
+reach_df['predicted'] = (
+    reach_df['bar_width']*(ms_coefs['mean']['50'] - ms_coefs['mean']['5'])
+)
+bar_df['predicted'] = (
+    bar_df['bar_width']*(ms_coefs['mean']['50'] - ms_coefs['mean']['5'])
+)
+lit_df['predicted'] = (
+    lit_df['Bar Width']*(ms_coefs['mean']['50'] - ms_coefs['mean']['5'])
+)
+
+# Log
+ms_df['predicted'] = (
+    ms_intercept['mean'][i] 
+    * (10**(ms_df['log_bar_width'])**ms_coefs['mean'][s])
+)
+reach_df['predicted'] = (
+    ms_intercept['mean'][i] 
+    * (10**(reach_df['log_bar_width'])**ms_coefs['mean'][s])
+)
+bar_df['predicted'] = (
+    ms_intercept['mean'][i] 
+    * (10**(bar_df['log_bar_width'])**ms_coefs['mean'][s])
+)
+lit_df['predicted'] = (
+    ms_intercept['mean'][i] 
+    * ((lit_df['Bar Width'])**ms_coefs['mean'][s])
+)
+
+
+ancient_df['predicted'] = ancient_df['bar_width'] * ms_coefs['mean'][s]
+
+lit_df = lit_df.dropna(how='any')
+lit_df['mean_width'] = lit_df['Channel Width']
+lit_df['river'] = lit_df['River']
+lit_stack = lit_df[['river', 'mean_width', 'predicted']]
+reach_stack = reach_df[['river', 'mean_width', 'predicted']]
+combo_df = reach_stack.append(lit_stack)
+
+
 bar_df['SchummPred'] = bar_df['bar_width'] * 1.5
 reach_df['SchummPred'] = reach_df['bar_width'] * 1.5
 
+r2Ms = r2_score(ms_df['mean_width'], ms_df['predicted'])
 r2Bar = r2_score(bar_df['mean_width'], bar_df['predicted'])
 r2Reach = r2_score(reach_df['mean_width'], reach_df['predicted'])
+r2Lit= r2_score(lit_df['Channel Width'], lit_df['predicted'])
+r2Combo = r2_score(combo_df['mean_width'], combo_df['predicted'])
 
 r2SchummBar = r2_score(bar_df['mean_width'], bar_df['SchummPred'])
 r2SchummReach = r2_score(reach_df['mean_width'], reach_df['SchummPred'])
@@ -363,12 +392,25 @@ r2SchummReach = r2_score(reach_df['mean_width'], reach_df['SchummPred'])
 # Figure with predicted vs actual
 fig, axs = plt.subplots(1, 2, sharey=True, sharex=True)
 xs = np.linspace(0, 10000, 10000)
-axs[0].scatter(reach_df['predicted'], reach_df['mean_width'], c='black')
+axs[0].scatter(ms_df['predicted'], ms_df['mean_width'], c='gray' )
+axs[0].scatter(bar_df['predicted'], bar_df['mean_width'], c='black' )
 axs[0].plot(xs, xs, linestyle='--', c='black')
 axs[0].set_yscale('log')
 axs[0].set_xscale('log')
 
-axs[1].scatter(bar_df['predicted'], bar_df['mean_width'], c='black')
+axs[1].scatter(lit_df['predicted'], lit_df['Channel Width'], marker='^')
+axs[1].scatter(ancient_df['predicted'], ancient_df['channel_width'], marker='s')
+
+ax[0].errorbar(
+    group['bar_width'],
+    group['mean_width'],
+    yerr=(group['channel_width_mean_std']),
+    xerr=(group['bar_width_std']),
+    ecolor='gray',
+    linestyle='', 
+    capthick=5
+)
+
 axs[1].plot(xs, xs, linestyle='--', c='black')
 axs[1].set_yscale('log')
 axs[1].set_xscale('log')

@@ -39,8 +39,8 @@ class RasterHandler():
 
         return i, j
 
-    def value_from_coordinates(self, dem, row, 
-                                xOrigin, yOrigin, pixelWidth, pixelHeight):
+    def value_from_coordinates(self, dem, row,
+                               xOrigin, yOrigin, pixelWidth, pixelHeight):
         """
         Finds DEM values from set of coordinates
         """
@@ -76,10 +76,7 @@ class RasterHandler():
         point.AddPoint(pointX, pointY)
         # create coordinate transformation
         inSpatialRef = osr.SpatialReference()
-        srs = inSpatialRef.ImportFromEPSG(iEPSG)
-
         outSpatialRef = osr.SpatialReference()
-        srs = outSpatialRef.ImportFromEPSG(oEPSG)
 
         coordTransform = osr.CoordinateTransformation(
             inSpatialRef,
@@ -91,7 +88,7 @@ class RasterHandler():
 
         return point.GetX(), point.GetY()
 
-    def clip_raster(self, ipath, dem_path):
+    def clip_raster(self, ipath, dem_path, B3input):
         """
         Clips raster file based on bounding box coordinates
         """
@@ -157,7 +154,8 @@ class RasterHandler():
 
         return pixelSizeX, pixelSizeY
 
-    def get_pixels(self, east, north, xOrigin, yOrigin, pixelWidth, pixelHeight):
+    def get_pixels(self, east, north, xOrigin, yOrigin,
+                   pixelWidth, pixelHeight):
 
         dem_col = np.floor((east - xOrigin) / pixelWidth).astype('int')
         dem_row = np.floor((yOrigin - north) / pixelHeight).astype('int')
@@ -343,22 +341,3 @@ class RasterHandler():
                 dem_coordinates = dem_coordinates.append(row)
 
         return dem_coordinates
-
-
-def main(B3input, B6input, DEM_name):
-
-    rh = RasterHandler()
-    rh.clip_raster(B3input, DEM_name)
-    rh.clip_raster(B6input, DEM_name)
-
-    DEMdata = rasterio.open(DEM_name)
-    landsatB3Data = rasterio.open(B3input)
-    landsatB6Data = rasterio.open(B6input)
-
-
-if __name__ == "__main__":
-    B3input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B3_clip.tiff'
-    B6input = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/LC08_L1TP_076014_20190620_20190704_01_T1_B6_clip.tiff'
-    DEM_name = '/Users/evangreenberg/PhD Documents/Projects/river-profiles/Landsat/koyukuk_dem_5_clip_2.tif'
-
-    main(B3input, B6input, DEM_name)

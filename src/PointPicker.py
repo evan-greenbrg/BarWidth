@@ -45,7 +45,7 @@ class WidthPicker(object):
         self.mouseX.append(self.x)
         self.mouseY.append(self.y)
         
-        if len(self.mouseX) >= 4:
+        if len(self.mouseX) >= 2:
             plt.close('all')
 
 
@@ -84,7 +84,6 @@ class BarPicker(object):
         print('Cleared')
 
     def next(self, event):
-        self.rsquared = 1
         plt.close('all')
 
     def skip(self, event):
@@ -99,11 +98,7 @@ class BarPicker(object):
     def draw_bar(self, event):
         # Get positions from plot call
         L = max(self.LsY) - min(self.LsY)
-        print('L')
-        print(L)
         x0 = np.average(self.LsX) 
-        print('X0')
-        print(x0)
 
         # Find the slope at x0
         close_x0 = closest(self.xaxis, x0)
@@ -131,7 +126,6 @@ class BarPicker(object):
             / (close_xs[maxi] - close_xs[mini])
         )
         k = (4 * dydx) / L
-        print(k)
 
         # Save popt
         self.popt = [L, x0, k]

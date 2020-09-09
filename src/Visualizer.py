@@ -1,8 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas
-from scipy.stats import gaussian_kde
-import seaborn as sns
+
 
 class Visualizer():
 
@@ -11,7 +10,7 @@ class Visualizer():
 
     def get_downstream_distance(self, bargroup):
         """
-        Take UTM coordinates from bars dictionary and 
+        Take UTM coordinates from bars dictionary and
         converts to downstream distance
         """
         df = pandas.DataFrame()
@@ -33,19 +32,18 @@ class Visualizer():
 
         return df
 
-    def plot_downstream_bars(self, bargroup):
+    def plot_downstream_bars(self, bargroup, max_distance, median_width):
         """
         Generates plot of all bar widths as ratio with channel width
         going downstream
         """
         plt.close()
-        fig = plt.figure(figsize = (11, 7))
         widthcol = 'channel_width_water'
         for name, group in bargroup:
             group = group[group[widthcol] > 0]
             plt.scatter(
-                group['distance'] / max_distance, 
-                group[widthcol] / median_width, 
+                group['distance'] / max_distance,
+                group[widthcol] / median_width,
                 s=10
             )
         plt.show()
@@ -68,9 +66,6 @@ class Visualizer():
         width_df = width_df.reset_index(drop=True)
         width_df = width_df.dropna(axis=0, how='any')
 
-        x = np.linspace(0, max(width_df['bar_width']) ,100)
-        y = 1.5*x
-
         plt.close()
         plt.scatter(width_df['bar_width'], width_df['channel_width'])
         plt.xlabel('Bar Width (m)')
@@ -82,7 +77,7 @@ class Visualizer():
             if isinstance(art, PolyCollection):
                 art.set_alpha(a)
 
-    def data_figure(self, out, group_river, group_bar,
+    def data_figure(self, out, ms_df, group_river, group_bar,
                     lit_df, median_size=10, alpha=0.2, density_size=5, 
                     bar_coefs=None, reach_coefs=None,
                     bar_intercept=None, reach_intercept=None, 
@@ -253,12 +248,23 @@ class Visualizer():
             'pink',
             'lime',
             '#c0b4ff',
-            '#ffc0b4'
+            '#ffc0b4',
+            'c'
         ]
         i = 0
         for name, group in group_bar:
-            print(name)
-            print(bar_colors[i])
+            print(i)
+            # Bend
+            ax[0].plot(
+                ms_df[ms_df['river']==name]['bar_width'],
+                ms_df[ms_df['river']==name]['mean_width'],
+                marker='o', 
+                linestyle='', 
+                ms=6, 
+                alpha=0.3,
+                label=name,
+                color=bar_colors[i]
+            )
             ax[0].plot(
                 group['bar_width'], 
                 group['mean_width'], 
@@ -266,29 +272,41 @@ class Visualizer():
                 markeredgewidth=1.5,
                 markeredgecolor='black',
                 linestyle='', 
+                zorder=98,
                 ms=median_size, 
                 label=name,
                 color=bar_colors[i]
             )
-            ax[1].plot(
-                group['bar_width'].median(),
-                group['mean_width'].median(),
-                marker='o', 
-                markeredgewidth=1.5,
-                markeredgecolor='black',
+            ax[0].errorbar(
+                group['bar_width'],
+                group['mean_width'],
+                yerr=(group['channel_width_mean_std']),
+                xerr=(group['bar_width_std']),
+                ecolor='gray',
                 linestyle='', 
-                ms=median_size, 
-                label=name,
-                color=bar_colors[i]
-            )
-            ax[1].errorbar(
-                group['bar_width'].median(),
-                group['mean_width'].median(),
-                yerr=(group['mean_width'].std() / 2),
-                xerr=(group['bar_width'].std() / 2),
-                ecolor=bar_colors[i],
                 capthick=5
             )
+
+#            # Reach
+#            ax[1].plot(
+#                group['bar_width'].median(),
+#                group['mean_width'].median(),
+#                marker='o', 
+#                markeredgewidth=1.5,
+#                markeredgecolor='black',
+#                linestyle='', 
+#                ms=median_size, 
+#                label=name,
+#                color=bar_colors[i]
+#            )
+#            ax[1].errorbar(
+#                group['bar_width'].median(),
+#                group['mean_width'].median(),
+#                yerr=(group['mean_width'].std()),
+#                xerr=(group['bar_width'].std()),
+#                ecolor=bar_colors[i],
+#                capthick=5
+#            )
             i += 1
 
         # Literature Values
@@ -314,31 +332,36 @@ class Visualizer():
                 row['Channel Width'], 
                 marker='^',
                 c=colors[j],
+                ms=15,
                 label=row['River']
             ) 
             j += 1
-        fig.legend()
+        # fig.legend()
+        # Ancient Values
+        data = {
+            'bar_width': [124, 11.143, 40],
+            'channel_width': [301, 23.21, 63]
+        }
+        ancient_df = pandas.DataFrame(data)
+        colors = [
+            'green',
+            'red',
+            'blue'
+        ]
+        j = 0
+        for idx, row in ancient_df.iterrows():
+            ax[1].plot(
+                row['bar_width'],
+                row['channel_width'],
+                marker='s',
+                c=colors[j],
+                ms=15
+            )
+            j += 1
 
-        # Add the other methods 
-        ySchum = 1.5*xs
+        # 1:1
         col = 'gray'
         lin = '--'
-
-        # Width- Depth
-        widthdepthdf = pandas.DataFrame({
-            'river': ['Mississippi', 'White', 'Koyukuk', 'Trinity', 'Powder', 'Red', 'Brazos', 'Tombigbee', 'Rio Grane'],
-            'depth': [26, 3, 7, 12, 3.5, 9, 11, 14.5, 10],
-            'widthCalc': [468, 54, 126, 216, 63, 162, 198, 261, 180],
-            'bar_width': [182.5, 21.8, 123., 63., 19., 24., 66., 90.5, 45.]
-        })
-        widthdepthdf = widthdepthdf.sort_values('bar_width').reset_index(drop=True)
-
-        # Schum
-        ax[1].plot(xs, ySchum, c=col, linestyle='-.')
-        # My method
-        ax[1].plot(xs, Ymean50_bar, c=col, linestyle=lin)
-        # Width-Depth
-#        ax[1].plot(widthdepthdf['bar_width'], widthdepthdf['widthCalc'])
         ax[0].plot(xs, xs**1, c=col, linestyle=lin)
         ax[1].plot(xs, xs**1, c=col, linestyle=lin)
 
@@ -354,7 +377,7 @@ class Visualizer():
 
         #  Legend
         handles, labels = ax[0].get_legend_handles_labels()
-        fig.legend(handles, labels, loc='lower center', ncol=7)
+        # fig.legend(handles, labels, loc='lower center', ncol=7)
         
         # X 
         ax[0].set_xlabel('')
