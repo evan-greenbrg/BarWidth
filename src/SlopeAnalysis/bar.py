@@ -160,8 +160,8 @@ datadf = datadf.append(ms_datadf)
 datadf = datadf.append(sac_datadf)
 datadf = datadf.append(bev_datadf)
 
-widthdf = datadf[['river', 'idx', 'channel_width_mean']]
-paramdf = paramdf[['river', 'idx', 'k', 'X0', 'L']]
+widthdf = datadf[['river', 'bar', 'idx', 'channel_width_mean']]
+paramdf = paramdf[['river', 'bar', 'idx', 'k', 'X0', 'L']]
 
 paramdf = paramdf.replace('False', numpy.nan)
 paramdf['k'] = paramdf['k'].astype('float')
@@ -171,6 +171,7 @@ paramdf['L'] = paramdf['L'].astype('float')
 # Get all of the slopes
 rivers = []
 idxs = []
+bars = []
 thetas = []
 for idx, row in paramdf.iterrows():
     cond = (
@@ -186,6 +187,7 @@ for idx, row in paramdf.iterrows():
     y = (sigmoid(x, row['L'], 0, abs(row['k'])))
 
     rivers.append(row['river'])
+    bars.append(row['bar'])
     idxs.append(row['idx'])
     thetas.append(math.degrees(math.atan(
         (y[2] - y[0])
@@ -193,15 +195,16 @@ for idx, row in paramdf.iterrows():
     )))
 thetasdf = pandas.DataFrame(data={
     'river': rivers,
+    'bar': bars,
     'theta': thetas
 })
 
 theta_df = pandas.DataFrame(data={
-    'minSlope': thetasdf.groupby('river').min()['theta'],
-    'medianSlope': thetasdf.groupby('river').median()['theta'],
-    'maxSlope': thetasdf.groupby('river').max()['theta'],
-    'StdSlope': thetasdf.groupby('river').std()['theta'],
-})
+    'minSlope': thetasdf.groupby(['river', 'bar']).min()['theta'],
+    'medianSlope': thetasdf.groupby(['river', 'bar']).median()['theta'],
+    'maxSlope': thetasdf.groupby(['river', 'bar']).max()['theta'],
+    'StdSlope': thetasdf.groupby(['river', 'bar']).std()['theta'],
+}).reset_index(drop=False)
 theta_df.to_csv('thetadf.csv')
 
 # Get slopes

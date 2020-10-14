@@ -61,20 +61,33 @@ def angle_between(v1, v2):
     return np.arccos(np.clip(np.dot(v1, v2), -1.0, 1.0))
 
 
+def get_bar_coords(coordinates, bar):
+    tree = spatial.KDTree(coordinates[['easting', 'northing']])
+    distance, upstream_n = tree.query(
+        [(bar['upstream_easting'], bar['upstream_northing'])],
+        1
+    )
+    distance, downstream_n = tree.query(
+        [(bar['downstream_easting'], bar['downstream_northing'])],
+        1
+    )
+
+    return coordinates[upstream_n[0]:downstream_n[0]]
+
 # Load Parameters directly
 param = {
-    'DEMpath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/barCut/trinityDEM_clip_26915.tif',
-    'CenterlinePath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/barCut/trinityCenterline_4326.csv',
-    'esaPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/barCut/trinityOccurence_clip_26915.tif',
-    'barPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/barCut/trinity_bar_coords.csv',
+    'DEMpath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/Trinity_1m_be_clip.tif',
+    'CenterlinePath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/Trinity_Centerline.txt',
+    'esaPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/Trinity_water_surface_reproject.tif',
+    'barPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/trinity_bar_coords.csv',
     'CenterlineSmoothing': 10,
     'SectionLength': 350,
     'SectionSmoothing': 15,
     'WidthSens': 32,
     'mannual': True,
     'step': 1,
-    'OutputRoot': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/barCut/Output',
-    'depth': 6,
+    'OutputRoot': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/barCut/OutputFull',
+    'depth': 9,
     'interpolate': True
 }
 
@@ -155,14 +168,57 @@ if STEP:
 if len(coordinates) == 0:
     sys.exit("No coordinates")
 
+
+# Get Proj String
+ds = gdal.Open(param['DEMpath'], 0)
+ProjStr = "epsg:{0}".format(
+    osr.SpatialReference(
+        wkt=ds.GetProjection()
+    ).GetAttrValue('AUTHORITY', 1)
+)
+myProj = Proj(ProjStr)
+
+# Initialize Classes
+rh = RasterHandler()
+bh = BarHandler()
+
+# Get only the bar centerline coordinates
+print('Loading Bar .csv file')
+bar_df = pandas.read_csv(
+    param['barPath'],
+    names=[
+        'Latitude_us',
+        'Longitude_us',
+        'Latitude_ds',
+        'Longitude_ds'
+    ],
+    header=1
+)
+# Convert the Bar Lat Long to UTM Easting Northing
+print('Converting Bar Coordinates to Easting Northing')
+bar_df = bh.convert_bar_to_utm(myProj, bar_df)
+
+# Filter centerline for only bar coordinates
+print('Making Bar section structure')
+bar_coordinates = pandas.DataFrame()
+for idx, bar in bar_df.iterrows():
+    sections = get_bar_coords(
+        coordinates,
+        bar_df.iloc[idx]
+    )
+    print(len(sections))
+    bar_coordinates = bar_coordinates.append(sections)
+
+coordinates = bar_coordinates.reset_index(drop=True)
+
 # This is the primary sampling
 bar_data_df = pandas.DataFrame()
 finn = 25
-n = 10
+n = 50
 
 # 1 - 1:10
 start = 0
-stop = 10
+stop = 90
 for theta in range(start, stop):
     scoordinates = pandas.DataFrame(columns=[
         'lon',
@@ -176,7 +232,11 @@ for theta in range(start, stop):
         'dlon_cut',
         'dlat_cut',
     ])
-    for idx in coordinates.sample(n, replace=False).index:
+    if theta == start:
+        sampled_coordinates = coordinates.sample(n, replace=False).index
+    else:
+        sampled_coordinates = sampled_coordinates
+    for idx in sampled_coordinates:
         # Find the centerline direction at that bar point
         dlon, dlat = get_direction(coordinates, idx)
 
@@ -221,6 +281,7 @@ for theta in range(start, stop):
         'dlat_cut': 'dlat_inv'
     })
     print(scoordinates)
+    scoordinates = scoordinates.dropna(how='any')
 
     # Build the cross-section structure
     print('Building channel cross sections')
@@ -288,69 +349,66 @@ for theta in range(start, stop):
         )
         xsections[idx[0]]['elev_section'] = b
 
-    print('Finding Channel Widths')
-    # Set up channel banks dataframe
-    bank_df = pandas.DataFrame(
-        columns=[
-            'dem_easting',
-            'dem_northing',
-            'water_easting',
-            'water_northing'
-        ]
-    )
-
-    # Iterate through exsections to find widths
-    for idx in range(0, len(xsections), param['step']):
-        # Finds the channel width and associated points
-        if param['mannual']:
-            dem_width, dem_points = riv.mannual_find_channel_width(
-                idx,
-                xsections[idx]['elev_section']
-            )
-            plt.close('all')
-        else:
-            dem_width, dem_points = riv.find_channel_width(
-                xsections[idx]['elev_section'],
-                xsections[idx]['elev_section'],
-                order=param['WidthSens']
-            )
-        if len(
-            xsections[idx]['water_section'][
-                xsections[idx]['water_section']['value'] > 0
+    if theta == 0:
+        print('Finding Channel Widths')
+        # Set up channel banks dataframe
+        bank_df = pandas.DataFrame(
+            columns=[
+                'dem_easting',
+                'dem_northing',
+                'water_easting',
+                'water_northing'
             ]
-        ) > 0:
-            water_width, water_points = riv.find_channel_width_surface_water(
-                xsections[idx]
-            )
-        else:
-            water_width = None
-            water_points = None
+        )
 
-        # Save width values to the major cross-section structure
-        xsections[idx]['dem_width'] = dem_width
-        xsections[idx]['water_width'] = water_width
+        # Iterate through exsections to find widths
+        for idx in range(0, len(xsections), param['step']):
+            # Finds the channel width and associated points
+            if param['mannual']:
+                dem_width, dem_points = riv.mannual_find_channel_width(
+                    idx,
+                    xsections[idx]['elev_section']
+                )
+                plt.close('all')
+            else:
+                dem_width, dem_points = riv.find_channel_width(
+                    xsections[idx]['elev_section'],
+                    xsections[idx]['elev_section'],
+                    order=param['WidthSens']
+                )
+            if len(
+                xsections[idx]['water_section'][
+                    xsections[idx]['water_section']['value'] > 0
+                ]
+            ) > 0:
+                water_width, water_points = riv.find_channel_width_surface_water(
+                    xsections[idx]
+                )
+            else:
+                water_width = None
+                water_points = None
 
-        # If there is a step, fill the rest of the values
-        if param['step'] > 1:
-            if idx != len(xsections) - 1:
-                for j in range(param['step'] - 1):
-                    if idx + j > len(xsections) - 1:
-                        break
-                    xsections[idx + j]['dem_width'] = dem_width
-                    xsections[idx + j]['water_width'] = water_width
+            # Save width values to the major cross-section structure
+            xsections[idx]['dem_width'] = dem_width
+            xsections[idx]['water_width'] = water_width
 
-    # Get Proj String
-    ds = gdal.Open(param['DEMpath'], 0)
-    ProjStr = "epsg:{0}".format(
-        osr.SpatialReference(
-            wkt=ds.GetProjection()
-        ).GetAttrValue('AUTHORITY', 1)
-    )
-    myProj = Proj(ProjStr)
-
-    # Initialize BarHandler
-    rh = RasterHandler()
-    bh = BarHandler()
+            # If there is a step, fill the rest of the values
+            if param['step'] > 1:
+                if idx != len(xsections) - 1:
+                    for j in range(param['step'] - 1):
+                        if idx + j > len(xsections) - 1:
+                            break
+                        xsections[idx + j]['dem_width'] = dem_width
+                        xsections[idx + j]['water_width'] = water_width
+    else:
+        for idx in range(0, len(xsections), param['step']):
+            if param['step'] > 1:
+                if idx != len(xsections) - 1:
+                    for j in range(param['step'] - 1):
+                        if idx + j > len(xsections) - 1:
+                            break
+                        xsections[idx + j]['dem_width'] = 'nan'
+                        xsections[idx + j]['water_width'] = 'nan'
 
     # Read in the bar file to find the channel bars
     print('Loading Bar .csv file')
@@ -504,7 +562,7 @@ for theta in range(start, stop):
     bar_data_df['ratio'] = (
         bar_data_df['channel_width_mean']
         / bar_data_df['bar_width']
-    )
+['theta']    )
 
 # Save the angles you ran
 bar_data_df.to_csv('barCuts/angle_data/angle_{}_{}.csv'.format(start, stop-1))

@@ -11,11 +11,23 @@ df = pandas.DataFrame()
 for fi in fps:
     df = df.append(pandas.read_csv(fi))
 df = df.sort_values('theta')
-theta_df = df.groupby('theta').mean()
+
+theta_df = pandas.DataFrame()
+theta_group = df.groupby('theta')
+for name, group in theta_group:
+    sampdf = group.sample(3)
+    sampdf = sampdf.mean()
+    theta_df = theta_df.append(sampdf, ignore_index=True)
+
+# theta_df = df.groupby('theta').mean()
+theta_df['ratio'] = (
+    theta_df[theta_df['theta']==0]['channel_width_mean'].mean()
+    / theta_df['bar_width']
+)
 
 fig = plt.figure()
-plt.scatter(theta_df.index, theta_df['ratio'])
-plt.yticks(np.arange(0, 26, 2.0))
+plt.scatter(theta_df['theta'], theta_df['ratio'])
+plt.yticks(np.arange(0, 10, 2.0))
 plt.xlabel('Angle from Channel Normal')
 plt.ylabel('Channel Width / Bar Surface Width')
 fig.savefig('/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/figures/62420bar_cut_angles.svg', format='svg')
@@ -25,7 +37,7 @@ normf = '/home/greenberg/Code/Github/river-profiles/src/barCuts/angle_data/norm.
 norm = pandas.read_csv(normf)
 
 df = df[df['theta'] < 70]
-n = 25
+n = 15
 times = 101
 idx = [i for i in range(1, n+1)]
 cuts = {str(i): [] for i in range(1, n+1)}
@@ -63,7 +75,7 @@ ax.set_ylim([0, 10])
 
 plt.xlabel('Samples')
 plt.ylabel('Channel Width / Bar Surface Width')
-plt.yticks(np.arange(0, 44, 4.0))
+plt.yticks(np.arange(0, 10, 2.0))
 plt.legend(['Oblique Cross-Sections', 'Normal Cross-Sections'])
 
 plt.show()

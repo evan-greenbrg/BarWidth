@@ -330,9 +330,15 @@ class BarHandler():
         top_df = df.iloc[middle_point[0]:].reset_index(drop=True)
         top_df['diff'] = abs((L - top_df['elevation']) / L)
         if max(top_df['diff']) > 0.98:
-            top = top_df[top_df['diff'] >= (1 - sens)].iloc[0]
+            try:
+                top = top_df[top_df['diff'] >= (1 - sens)].iloc[0]
+            except IndexError:
+                return None, None
         else:
-            top = top_df[top_df['diff'] <= sens].iloc[0]
+            try:
+                top = top_df[top_df['diff'] <= sens].iloc[0]
+            except IndexError:
+                return None, None
 
         # Get the bottom of the clinoform
         bot_df = df.iloc[:middle_point[0]].reset_index(drop=True).iloc[::-1]
@@ -448,6 +454,9 @@ class BarHandler():
         banks = np.copy(section['bank'])
 
         print(banks)
+        if isinstance(banks[0], np.ndarray): 
+            banks = [banks[0][0], banks[1][0]]
+
         # Get banks-closest
         bank0_closest = closest(elev['distance'], banks[0])
         bank1_closest = closest(elev['distance'], banks[1])
@@ -460,6 +469,10 @@ class BarHandler():
 
         # Get elevation of channel top
         channel_top = float(max(elev['value_smooth'][tuple([banks_idx])]))
+
+        # Need to handle if I've given garbage width for bad section
+        if min(banks_idx) == max(banks_idx):
+            return section
 
         # Find all of the slopes within the channel
         channel = np.copy(elev[min(banks_idx):max(banks_idx)])

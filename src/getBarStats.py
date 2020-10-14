@@ -43,10 +43,6 @@ def main():
             errno.ENOENT, os.strerror(errno.ENOENT), input_param['demPath'])
     if not input_param.get('depth'):
         raise NameError('No depth given')
-    if not input_param.get('interpolate'):
-        raise NameError('No interpolation direction given')
-    if not input_param.get('mannual'):
-        raise NameError('No mannual or automatic direction given given')
     if not input_param.get('outputRoot'):
         raise NameError('No output root given')
 

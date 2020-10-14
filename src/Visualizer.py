@@ -1,3 +1,4 @@
+import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas
@@ -72,124 +73,86 @@ class Visualizer():
         plt.ylabel('Channel Width (m)')
         plt.savefig(path)
 
-    def data_figure(self, out, ms_df, group_river, group_bar,
-                    lit_df, median_size=10, alpha=0.2, density_size=5,
-                    bar_coefs=None, reach_coefs=None,
-                    bar_intercept=None, reach_intercept=None,
-                    fmt='png', log=True):
+    def data_figure(self, ms_df, ppc_coefs, group_river, 
+                    group_bar, lit_df, ms_coefs, 
+                    median_size=15, alpha=0.25, density_size=35,
+                    log=True, fit_intercept=True, fit_slope=False): 
         """
         Data Figure that shows bar width and channel width.
         Density cloud for the individual bar points
+
+        Note:
+        The way I've communicated and coded the ms_coefs object is strange.
+        It will either look 3 ways depending on the combination of 
+        transformation and fit that I'm going for.
+        If I've log-transformed the data and fitting both slope and intercept
+        ms_coefs will have a slope and intercept dict. 
+        If I've log-transformed the data and only fitting the intercept,
+        ms_coefs will only report the untransformed parameters.
+        This is going to be used in the prediction the same way as if I'm not
+        transforming the data and only fitting the slope.
         """
         # Get the lines for the estimated parameters
         # Xs
         xs = np.linspace(0, 1000, 10000)
-        # Mean Width
-        if bar_intercept and bar_coefs:
-            if not log:
-                Ymean5_bar = (
-                    bar_intercept['mean']['5'] + bar_coefs['mean']['5'] * xs
-                )
-                Ymean50_bar = (
-                    bar_intercept['mean']['50'] + bar_coefs['mean']['50'] * xs
-                )
-                Ymean95_bar = (
-                    bar_intercept['mean']['95'] + bar_coefs['mean']['95'] * xs
-                )
-            else:
-                Ymean5_bar = (
-                    bar_intercept['mean']['5'] * (xs**bar_coefs['mean']['5'])
-                )
-                Ymean50_bar = (
-                    bar_intercept['mean']['50']
-                    * (xs**bar_coefs['mean']['50'])
-                )
-                Ymean95_bar = (
-                    bar_intercept['mean']['95']
-                    * (xs**bar_coefs['mean']['95'])
-                )
-        elif not bar_intercept and bar_coefs:
-            if not log:
-                Ymean5_bar = bar_coefs['mean']['5'] * xs
-                Ymean50_bar = (
-                    bar_coefs['mean']['50'] * xs
-                )
-                Ymean95_bar = (
-                    bar_coefs['mean']['95'] * xs
-                )
-            else:
-                Ymean5_bar = xs**bar_coefs['mean']['5']
-                Ymean50_bar = xs**bar_coefs['mean']['50']
-                Ymean95_bar = xs**bar_coefs['mean']['95']
 
-        elif bar_intercept and not bar_coefs:
-            if log:
-                Ymean5_bar = bar_intercept['mean']['5'] * xs
-                Ymean50_bar = bar_intercept['mean']['50'] * xs
-                Ymean95_bar = bar_intercept['mean']['95'] * xs
-
-        if reach_intercept and reach_coefs:
-            if not log:
-                Ymean5_reach = (
-                    reach_intercept['mean']['5']
-                    + (reach_coefs['mean']['5'] * xs)
-                )
-                Ymean50_reach = (
-                    reach_intercept['mean']['50']
-                    + (reach_coefs['mean']['50'] * xs)
-                )
-                Ymean95_reach = (
-                    reach_intercept['mean']['95']
-                    + (reach_coefs['mean']['95'] * xs)
-                )
-            else:
-                Ymean5_reach = (
-                    reach_intercept['mean']['5']
-                    * (xs**reach_coefs['mean']['5'])
-                )
-                Ymean50_reach = (
-                    reach_intercept['mean']['50']
-                    * (xs**reach_coefs['mean']['50'])
-                )
-                Ymean95_reach = (
-                    reach_intercept['mean']['95']
-                    * (xs**reach_coefs['mean']['95'])
-                )
-        elif not reach_intercept and reach_coefs:
-            if not log:
-                Ymean5_reach = reach_coefs['mean']['5'] * xs
-                Ymean50_reach = (
-                    reach_coefs['mean']['50'] * xs
-                )
-                Ymean95_reach = (
-                    reach_coefs['mean']['95'] * xs
-                )
-            else:
-                Ymean5_reach = xs**reach_coefs['mean']['5']
-                Ymean50_reach = xs**reach_coefs['mean']['50']
-                Ymean95_reach = xs**reach_coefs['mean']['95']
-        elif reach_intercept and not reach_coefs:
-            Ymean5_reach = reach_intercept['mean']['5'] * xs
-            Ymean50_reach = reach_intercept['mean']['50'] * xs
-            Ymean95_reach = reach_intercept['mean']['95'] * xs
+        # Get Predicted values
+        if fit_intercept and fit_slope:
+            y3_ms = (
+                ms_coefs['Intercept']['3'] 
+                * (xs**ms_coefs['slope']['3'])
+            )
+            y50_ms = (
+                ms_coefs['Intercept']['50'] 
+                * (xs**ms_coefs['slope']['50'])
+            )
+            y97_ms = (
+                ms_coefs['Intercept']['97'] 
+                * (xs**ms_coefs['slope']['97'])
+            )
+        else:
+            y3_ms = ms_coefs['3'] * xs
+            y50_ms = ms_coefs['50'] * xs
+            y97_ms = ms_coefs['97'] * xs
 
         fig, ax = plt.subplots(1, 2)
         fig.set_figheight(15)
         fig.set_figwidth(15)
 
+        # Plot the posterior predcition distribution
+        ppc_lower = ppc_coefs['lower'] * xs
+        ppc_upper = ppc_coefs['upper'] * xs
+
+        ax[0].fill_between(
+            xs,
+            ppc_lower,
+            ppc_upper,
+            color='palegreen',
+            edgecolor='seagreen',
+            linestyle='--'
+        )
+        ax[1].fill_between(
+            xs,
+            ppc_lower,
+            ppc_upper,
+            color='palegreen',
+            edgecolor='seagreen',
+            linestyle='--'
+        )
+
         # Plot the parameter fill
         ax[0].fill_between(
             xs,
-            Ymean5_bar,
-            Ymean95_bar,
+            y3_ms,
+            y97_ms,
             color='lightgray',
             edgecolor='lightgray',
             linestyle='--'
         )
         ax[1].fill_between(
             xs,
-            Ymean5_bar,
-            Ymean95_bar,
+            y3_ms,
+            y97_ms,
             color='lightgray',
             edgecolor='lightgray',
             linestyle='--'
@@ -206,7 +169,7 @@ class Visualizer():
         # Median Bars
         ax[0].plot(
             xs,
-            Ymean5_bar,
+            y3_ms,
             linewidth=width,
             color=color,
             linestyle=line_style,
@@ -214,7 +177,7 @@ class Visualizer():
         )
         ax[0].plot(
             xs,
-            Ymean50_bar,
+            y50_ms,
             linewidth=width50,
             color=color,
             linestyle=line50,
@@ -222,7 +185,7 @@ class Visualizer():
         )
         ax[0].plot(
             xs,
-            Ymean95_bar,
+            y97_ms,
             linewidth=width,
             color=color,
             linestyle=line_style,
@@ -231,7 +194,7 @@ class Visualizer():
 
         ax[1].plot(
             xs,
-            Ymean5_bar,
+            y3_ms,
             linewidth=width,
             color=color,
             linestyle=line_style,
@@ -239,7 +202,7 @@ class Visualizer():
         )
         ax[1].plot(
             xs,
-            Ymean50_bar,
+            y50_ms,
             linewidth=width50,
             color=color,
             linestyle=line50,
@@ -247,7 +210,7 @@ class Visualizer():
         )
         ax[1].plot(
             xs,
-            Ymean95_bar,
+            y97_ms,
             linewidth=width,
             color=color,
             linestyle=line_style,
@@ -306,26 +269,7 @@ class Visualizer():
                 capthick=5
             )
 
-#            # Reach
-#            ax[1].plot(
-#                group['bar_width'].median(),
-#                group['mean_width'].median(),
-#                marker='o',
-#                markeredgewidth=1.5,
-#                markeredgecolor='black',
-#                linestyle='',
-#                ms=median_size,
-#                label=name,
-#                color=bar_colors[i]
-#            )
-#            ax[1].errorbar(
-#                group['bar_width'].median(),
-#                group['mean_width'].median(),
-#                yerr=(group['mean_width'].std()),
-#                xerr=(group['bar_width'].std()),
-#                ecolor=bar_colors[i],
-#                capthick=5
-#            )
+            # Next river
             i += 1
 
         # Literature Values
@@ -410,8 +354,8 @@ class Visualizer():
         ax[1].set(aspect=.9)
 
         # Set axis range
-        ax[0].set_xlim(10, 1000)
-        ax[0].set_ylim(10, 3000)
+        ax[0].set_xlim(5, 1000)
+        ax[0].set_ylim(5, 3000)
         ax[1].set_xlim(5, 1000)
         ax[1].set_ylim(5, 3000)
 
@@ -424,8 +368,6 @@ class Visualizer():
             va='center',
             rotation='vertical'
         )
-        # Save
-        fig.savefig(out, format=fmt)
         plt.show()
 
     def predicted_vs_actual(self, ms_df, bar_df, lit_df, ancient_df):

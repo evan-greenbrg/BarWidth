@@ -86,11 +86,15 @@ def posterior_distribution(X, y, N):
 
 
 # Load the data
-ktau_path = '../k_taoRivers.csv'
+ktau_path = 'k_taoRivers.csv'
 theta_path = 'thetadf.csv'
+curvature_path = 'curvature.csv'
+grain_path = 'grain_sizes.csv'
 
 thetadf = pandas.read_csv(theta_path)
 ktaudf = pandas.read_csv(ktau_path)
+curdf = pandas.read_csv(curvature_path)
+graindf = pandas.read_csv(grain_path)
 
 # Load the discharge data
 paths = {
@@ -231,6 +235,40 @@ df = ktaudf.merge(discharge_df, how='left', on='river')
 df['w_d'] = df['width'] / df['Depth']
 df['tbank_tbed'] = df['Bank Shear Stress'] / df['Bed Shear Stress']
 
+# Change names 
+lookup = {
+    'Brazos River': 'brazos',
+    'Koyukuk River': 'koyukuk',
+    'Mississippi River': 'miss',
+    'Mississippi River - Leclair': 'miss',
+    'Nestucca River': 'nestucca',
+    'Powder River': 'powder',
+    'Red River': 'red',
+    'Rio Grande River': 'rio',
+    'Sacramento River': 'sacramento',
+    'Tombigbee River': 'tombigbee',
+    'Trinity River': 'trinity',
+    'White River': 'white'
+}
+
+cols_new_cur = []
+cols_new_grain = []
+for idx, row in curdf.iterrows():
+    cols_new_cur.append(lookup[row['river']])
+for idx, row in graindf.iterrows():
+    cols_new_grain.append(lookup[row['river']])
+
+curdf['river'] = cols_new_cur
+graindf['river'] = cols_new_grain
+
+curdf = curdf.groupby('river').median().reset_index(drop=False)
+
+# merrge
+df = df.merge(curdf, how='left', on='river')
+df = df.merge(graindf, how='left', on='river')
+
+
+thetadf['theta'] = thetadf['medianSlope']
 thetadf['tan'] = numpy.tan(numpy.radians(thetadf['theta']))
 
 # Regression
@@ -349,6 +387,7 @@ linB = coefs['bot']['intercept'] * numpy.exp(lins * abs(coefs['bot']['slope']))
 # Correlation
 thetamed = thetadf.groupby('river').median().reset_index(drop=False)
 join = df.merge(thetamed, on='river')
+join['Rn'] = join['curvature'] / join['Depth']
 columns = [
     'Slope',
     'w_d',
@@ -364,7 +403,11 @@ columns = [
     'DVIc',
     'DVIy',
     'theta',
-    'tan'
+    'tan',
+    'curvature',
+    'Rn',
+    'Bed material -Lower (m)',
+    'Bed material -Upper (m)'
 ]
 combos = list(itertools.combinations(columns, 2))
 data = {
