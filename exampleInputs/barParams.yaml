@@ -1,0 +1,8 @@
+xPath: '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Trinity/xsections.npy'
+coordPath: '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Trinity/coordinates.csv' 
+barPath: '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/trinity_bar_coords.csv'
+demPath: '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/Trinity_1m_be_clip.tif'
+outputRoot: '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Trinity/'
+depth: 9
+interpolate: True
+mannual: True

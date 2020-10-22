@@ -1,0 +1,8 @@
+DEMpath: '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/Trinity_1m_be_clip.tif'
+CenterlinePath: '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/Trinity_Centerline.txt'
+esaPath: '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/Trinity_water_surface_reproject.tif'
+CenterlineSmoothing: 10
+SectionLength: 300
+SectionSmoothing: 35
+OutputRoot: '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Trinity/'
+manual: True
