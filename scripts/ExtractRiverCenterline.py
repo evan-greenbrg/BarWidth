@@ -119,18 +119,9 @@ def get_tiles(path, n):
             yield window, transform
 
 
-DemPath = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/sacramento_merged_26910.tif'
-
-B3path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/sacramento_b3_clip_26910.tif'
-B6path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/sacramento_b6_clip_26910.tif'
-
 B3out = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/sacramento_b3_clip_26910.tif'
 B6out = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/sacramento_b6_clip_26910.tif'
 epsg = 29610
-
-# Clip the Raster
-# clip_raster(B3path, DemPath, epsg, B3out)
-# clip_raster(B6path, DemPath, epsg, B6out)
 
 # Find the centerline
 srcB3 = rasterio.open(B3out)
