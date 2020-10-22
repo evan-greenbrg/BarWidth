@@ -8,7 +8,7 @@ setup(
     packages=['BarWidth'],
     license='LICENSE.txt',
     description='Toolset to accompany Manuscript titled: Quantifying bankfull flow width using preserved bar clinoforms from fluvial strata',
-    long_description=open('README.txt').read(),
+    long_description=open('README.md').read(),
     install_requires=[
         "numpy",
         "pandas",
