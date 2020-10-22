@@ -14,8 +14,8 @@ import pandas
 from pyproj import Proj
 from matplotlib import pyplot as plt
 
-from BarHandler import BarHandler
-from RasterHandler import RasterHandler
+from BarWidth import BarHandler
+from BarWidth import RasterHandler
 
 
 MIN_RSQUARE = 0.3
@@ -60,8 +60,8 @@ def main():
     myProj = Proj(ProjStr)
 
     # Initialize BarHandler
-    rh = RasterHandler()
-    bh = BarHandler(
+    rh = RasterHandler.RasterHandler()
+    bh = BarHandler.BarHandler(
         xsections[0]['coords'][0],
         xsections[0]['coords'][1]
     )

@@ -8,7 +8,7 @@ from sklearn.linear_model import LinearRegression
 import pymc3 as pm
 from sklearn.metrics import r2_score
 
-from Visualizer import Visualizer
+from BarWidth import Visualizer 
 
 
 LOG = True 
@@ -142,7 +142,6 @@ ms_df = ms_df[ms_df.river != 'Platte River']
 # Get Rid of Koyukuk
 # bar_df = bar_df[bar_df.river != 'Koyukuk River']
 # ms_df = ms_df[ms_df.river != 'Koyukuk River']
-
 
 # Clean df
 bar_df = bar_df[[
@@ -378,8 +377,7 @@ group_river = ms_df.groupby('river')
 group_bar = bar_df.groupby('river')
 
 # Initialize the visulizer class
-vh = Visualizer()
-outpath = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/figures/62420_data-v3.svg'
+vh = Visualizer.Visualizer()
 
 # Read in literature data
 lit_df = pandas.read_csv(lit_path)

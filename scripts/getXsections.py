@@ -15,8 +15,9 @@ import pandas
 from pyproj import Proj
 from matplotlib import pyplot as plt
 
-from RasterHandler import RasterHandler
-from RiverHandler import RiverHandler
+from BarWidth import RasterHandler
+from BarWidth import RiverHandler
+
 
 # If you don't want to sample all of the centerline points
 STEP = 5
@@ -57,8 +58,8 @@ def main():
 #        raise NameError('No given manual or automatic direction')
 
     # Initialize classes, objects, get ProjStr
-    riv = RiverHandler()
-    rh = RasterHandler()
+    riv = RiverHandler.RiverHandler()
+    rh = RasterHandler.RasterHandler()
     ds = gdal.Open(param['DEMpath'], 0)
     water_ds = gdal.Open(param['esaPath'], 0)
     ProjStr = "epsg:{0}".format(

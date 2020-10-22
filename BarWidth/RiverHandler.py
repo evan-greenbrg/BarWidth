@@ -7,7 +7,7 @@ from scipy.signal import argrelextrema
 from scipy import spatial
 from rivamap import georef
 
-from PointPicker import WidthPicker
+from BarWidth import PointPicker
 
 
 class RiverHandler():
@@ -277,7 +277,7 @@ class RiverHandler():
         fig = plt.figure()
         one = plt.scatter(p, t)
         plt.title('{}: Pick positive Banks First'.format(idx))
-        PP = WidthPicker(plt.gca())
+        PP = PointPicker.WidthPicker(plt.gca())
         fig.canvas.mpl_connect('pick_event', PP)
         one.set_picker(1)
         plt.show()

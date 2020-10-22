@@ -6,7 +6,7 @@ from scipy.spatial.distance import cdist
 from matplotlib import pyplot as plt
 from matplotlib.widgets import Button
 
-from PointPicker import BarPicker
+from BarWidth import PointPicker
 
 
 def closest(lst, K):
@@ -614,7 +614,7 @@ class BarHandler():
 
         fig, ax = plt.subplots(1, 1)
         line, = ax.plot(x, y, linewidth=3)
-        BC = BarPicker(ax, x, y)
+        BC = PointPicker.BarPicker(ax, x, y)
 
         fig.canvas.mpl_connect('button_press_event', BC)
         line.set_picker(1)

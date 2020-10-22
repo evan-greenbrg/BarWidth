@@ -10,9 +10,9 @@ from pyproj import Proj
 from matplotlib import pyplot as plt
 from scipy import spatial
 
-from BarHandler import BarHandler
-from RasterHandler import RasterHandler
-from RiverHandler import RiverHandler
+from BarWidth import BarHandler
+from BarWidth import RasterHandler
+from BarWidth import RiverHandler
 
 STEP = None
 MIN_RSQUARE = 0.05
@@ -92,8 +92,8 @@ param = {
 }
 
 # Initialize classes, objects, get ProjStr
-riv = RiverHandler()
-rh = RasterHandler()
+riv = RiverHandler.RiverHandler()
+rh = RasterHandler.RasterHandler()
 ds = gdal.Open(param['DEMpath'], 0)
 water_ds = gdal.Open(param['esaPath'], 0)
 ProjStr = "epsg:{0}".format(
@@ -179,8 +179,8 @@ ProjStr = "epsg:{0}".format(
 myProj = Proj(ProjStr)
 
 # Initialize Classes
-rh = RasterHandler()
-bh = BarHandler()
+rh = RasterHandler.RasterHandler()
+bh = BarHandler.BarHandler()
 
 # Get only the bar centerline coordinates
 print('Loading Bar .csv file')

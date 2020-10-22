@@ -14,9 +14,8 @@ import numpy as np
 import pandas
 from pyproj import Proj
 
-from BarHandler import BarHandler
-from RasterHandler import RasterHandler
-from RiverHandler import RiverHandler
+from BarWidth import BarHandler
+from BarWidth import RasterHandler
 
 
 # Paths
@@ -72,8 +71,8 @@ for path in range(0, len(xpaths)):
     myProj = Proj(ProjStr)
 
     # Initialize BarHandler
-    rh = RasterHandler()
-    bh = BarHandler(
+    rh = RasterHandler.RasterHandler()
+    bh = BarHandler.BarHandler(
         xsections[0]['coords'][0],
         xsections[0]['coords'][1]
     )

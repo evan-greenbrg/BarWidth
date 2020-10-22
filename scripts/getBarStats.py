@@ -13,7 +13,7 @@ import numpy as np
 import pandas
 from pyproj import Proj
 
-from BarHandler import BarHandler
+from BarWidth import BarHandler 
 
 
 MIN_RSQUARE = 0.05
@@ -60,7 +60,7 @@ def main():
     myProj = Proj(ProjStr)
 
     # Initialize BarHandler
-    bh = BarHandler()
+    bh = BarHandler.BarHandler()
 
     # Read in the bar file to find the channel bars
     print('Loading Bar .csv file')
