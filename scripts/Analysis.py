@@ -13,7 +13,7 @@ from BarWidth import Visualizer
 
 LOG = True 
 FIT_INTERCEPT = True 
-FIT_SLOPE = False
+FIT_SLOPE = True
 
 def getModel(X, y, fit_intercept=False, fit_slope=True):
     # Set up
@@ -73,6 +73,7 @@ def samplePosterior(model, N, fit_intercept=False, fit_slope=True):
 
 
     summary = az.summary(trace, var_names=summary_names, round_to=3)
+    print(summary)
 
     params = {}
     for name in summary_names:
@@ -128,20 +129,40 @@ def predictionInterval(X, Y, params, fit_intercept, fit_slope):
     return bound
 
 
-bars_f = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/sampled_bar_average_data.csv'
+# bars_f = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/sampled_bar_average_data.csv'
+bars_f = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/bar_average_data.csv'
 # use pm.df_summary(normal_trace) for unsampled
+
+#all_f = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/sampled_total_data.csv'
 all_f = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/total_data.csv'
+
 lit_path = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Lit_values.csv'
 bar_df = pandas.read_csv(bars_f)
 ms_df = pandas.read_csv(all_f)
 
-# Get Rid of Platte
-bar_df = bar_df[bar_df.river != 'Platte River']
-ms_df = ms_df[ms_df.river != 'Platte River']
 
 # Get Rid of Koyukuk
 # bar_df = bar_df[bar_df.river != 'Koyukuk River']
 # ms_df = ms_df[ms_df.river != 'Koyukuk River']
+
+# Get Rid of White
+# bar_df = bar_df[bar_df.river != 'Nestucca River']
+# ms_df = ms_df[ms_df.river != 'Nestucca River']
+# 
+# bar_df = bar_df[bar_df.river != 'Tombigbee River']
+# ms_df = ms_df[ms_df.river != 'Tombigbee River']
+# 
+# bar_df = bar_df[bar_df.river != 'White River']
+# ms_df = ms_df[ms_df.river != 'White River']
+# 
+# bar_df = bar_df[bar_df.river != 'Red River']
+# ms_df = ms_df[ms_df.river != 'Red River']
+
+# bar_df = bar_df[bar_df.river != 'Powder River']
+# ms_df = ms_df[ms_df.river != 'Powder River']
+
+# bar_df = bar_df[bar_df.river != 'Brazos River']
+# ms_df = ms_df[ms_df.river != 'Brazos River']
 
 # Clean df
 bar_df = bar_df[[
@@ -150,8 +171,6 @@ bar_df = bar_df[[
     'channel_width_dem',
     'channel_width_water',
     'bar_width',
-    'bar_width_std',
-    'channel_width_mean_std'
 ]]
 ms_df = ms_df[[
     'river',
@@ -357,9 +376,43 @@ elif fit_intercept and fit_slope:
             },
         }
 
+# plot the posterior
+# az.plot_ppc(az.from_pymc3(posterior_predictive=ppc, model=model));
+# 
+# predictor = ms_df['bar_width'].values
+# outcome = ms_df['channel_width_dem'].values
+# 
+# mu_pp = (10**ppc['Intercept'] * predictor[:, None]).T
+# 
+# _, ax = plt.subplots()
+# 
+# ax.plot(predictor, outcome, "o", ms=4, alpha=0.4, label="Data")
+# ax.plot(predictor, mu_pp.mean(0), label="Mean outcome", alpha=0.6)
+# az.plot_hpd(
+#     predictor,
+#     mu_pp,
+#     ax=ax,
+#     fill_kwargs={"alpha": 0.8, "label": "Mean outcome 94% HPD"},
+# )
+# az.plot_hpd(
+#     predictor,
+#     10**ppc["Y_obs"],
+#     ax=ax,
+#     fill_kwargs={"alpha": 0.8, "color": "#a1dab4", "label": "Outcome 94% HPD"},
+# )
+# 
+# ax.set_xlabel("Predictor (stdz)")
+# ax.set_ylabel("Outcome (stdz)")
+# ax.set_title("Posterior predictive checks")
+# ax.legend(ncol=2, fontsize=10);
+# ax.set_xscale('log')
+# ax.set_yscale('log')
+# plt.show()
+# 
+# az.plot_posterior(ppc_ms['dem'])
 
 # Find equations for limits of HPD
-hpd = pandas.DataFrame(az.hpd(ppc_ms['mean']), columns=['lower', 'upper'])
+hpd = pandas.DataFrame(az.hpd(ppc_ms['dem']), columns=['lower', 'upper'])
 hpd['lower'] = 10**hpd['lower']
 hpd['upper'] = 10**hpd['upper']
 ppc_coefs = {}
@@ -385,6 +438,7 @@ lit_df = pandas.read_csv(lit_path)
 ###############################
 ###         FIGURE 3ac      ###
 ###############################
+vh = Visualizer()
 vh.data_figure(
     ms_df,
     ppc_coefs,
@@ -402,8 +456,8 @@ vh.data_figure(
 
 # Load ancient Values
 data = {
-    'bar_width': [124, 11.143, 40],
-    'channel_width': [301, 23.21, 63]
+    'bar_width': [124, 11.143, 40, 15, 363, 456],
+    'channel_width': [301, 23.21, 63, 28, 720, 753]
 }
 ancient_df = pandas.DataFrame(data)
 
@@ -467,7 +521,7 @@ r2Ms = r2_score(ms_df['mean_width'], ms_df['predicted'])
 r2Bar = r2_score(bar_df['mean_width'], bar_df['predicted'])
 r2Reach = r2_score(reach_df['mean_width'], reach_df['predicted'])
 r2Lit = r2_score(lit_df['Channel Width'], lit_df['predicted'])
-r2ancient = r2_score(ancient_df['Channel Width'], ancient_df['predicted'])
+r2ancient = r2_score(ancient_df['channel_width'], ancient_df['predicted'])
 r2Combo = r2_score(combo_df['mean_width'], combo_df['predicted'])
 r2SchummBar = r2_score(bar_df['mean_width'], bar_df['SchummPred'])
 r2SchummReach = r2_score(reach_df['mean_width'], reach_df['SchummPred'])

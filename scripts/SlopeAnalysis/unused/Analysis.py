@@ -208,6 +208,7 @@ names = [
     'rio',
     'tombigbee',
     'miss',
+    'miss',
     'sacramento',
     'nestucca'
 ]
@@ -267,7 +268,6 @@ curdf = curdf.groupby('river').median().reset_index(drop=False)
 df = df.merge(curdf, how='left', on='river')
 df = df.merge(graindf, how='left', on='river')
 
-
 thetadf['theta'] = thetadf['medianSlope']
 thetadf['tan'] = numpy.tan(numpy.radians(thetadf['theta']))
 
@@ -291,19 +291,29 @@ dfr = df[['river', 'peakedness', 'DVIa', 'DVIc', 'DVIy']].set_index(
 ).dropna(how='any')
 rdf = thetar.join(dfr, on='river').dropna(how='any')
 
+# Filter out mississippi
+rdf = rdf[rdf.index != 'miss']
+
 ys = {
-    'bot': rdf['median'] - (2 * rdf['std']),
+#    'bot': rdf['median'] - (2 * rdf['std']),
     'med': rdf['median'],
     'top': rdf['median'] + (2 * rdf['std']),
 }
-X = rdf['DVIc']
+# ys = {
+#     'bot': rdf['min'],
+#     'med': rdf['median'],
+#     'top': rdf['max'],
+# }
+X = rdf[col]
 coefs = {}
 for name, y in ys.items():
+    print(name)
     (intercept, slope), s = scipy.optimize.curve_fit(
         lambda t,a,b: a*numpy.exp(b*t),  
         X,  
         y,
-        p0=(.0001, .5)
+        p0=(.001, .5),
+        maxfev=6000
     )
     coefs[name] = {
         'intercept': intercept,
@@ -313,17 +323,18 @@ for name, y in ys.items():
 #### HAVE PARAMETERS NEED TO MAKE CURVES TO PLOT
 
 lins = numpy.linspace(0, 24, 30)
-linB = coefs['bot']['intercept'] * numpy.exp(lins * abs(coefs['bot']['slope']))
+# linB = coefs['bot']['intercept'] * numpy.exp(lins * abs(coefs['bot']['slope']))
 linM = coefs['med']['intercept'] * numpy.exp(lins * coefs['med']['slope'])
 linT = coefs['top']['intercept'] * numpy.exp(lins * coefs['top']['slope'])
 
 # Plot
+thetadf = thetadf[thetadf['river'] != 'miss']
 theta_group = thetadf.groupby('river')
 
 colors = {
     'brazos': 'gray',
     'koyukuk': '#E69F00',
-    'miss': '#56B4E9',
+#    'miss': '#56B4E9',
     'nestucca': '#092C48',
     'powder': '#F0E442',
     'red': '#0072B2',
@@ -338,7 +349,7 @@ for name, group in theta_group:
     print(name)
     bplot = plt.boxplot(
         group['theta'], 
-        positions=[float(df[df['river'] == name]['DVIc'])],
+        positions=[float(df[df['river'] == name][col])],
         manage_ticks=False,
         patch_artist=True,
         widths=0.3
@@ -346,14 +357,14 @@ for name, group in theta_group:
     bplot['boxes'][0].set_facecolor(colors[name])
     i += 1
 
-    plt.fill_between(
-        lins, 
-        linB, 
-        linT, 
-        color='lightgray', 
-        edgecolor='lightgray',
-        linestyle='--'
-    )
+#    plt.fill_between(
+#        lins, 
+#        linB, 
+#        linT, 
+#        color='lightgray', 
+#        edgecolor='lightgray',
+#        linestyle='--'
+#    )
 plt.plot(lins, linM, linestyle='--', color='gray', linewidth=0.9)
 
 plt.xlim((0, 24))
@@ -406,8 +417,8 @@ columns = [
     'tan',
     'curvature',
     'Rn',
-    'Bed material -Lower (m)',
-    'Bed material -Upper (m)'
+#    'Bed material -Lower (m)',
+#    'Bed material -Upper (m)'
 ]
 combos = list(itertools.combinations(columns, 2))
 data = {
@@ -433,4 +444,12 @@ cond = spearmdf[
 spearmdf['sig'] = (spearmdf['p'] > 0.95) | (spearmdf['p'] < 0.05)
 sigdf = spearmdf[spearmdf['sig']]
 cond.to_csv('correlations.csv')
+
+
+plt.scatter(join['Rn'], join['tan'])
+plt.xscale('log')
+plt.yscale('log')
+plt.xlim([10,1000])
+plt.ylim([.0010,1])
+plt.show()
 

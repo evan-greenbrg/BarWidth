@@ -1,4 +1,5 @@
 import math
+import numpy as np
 import pandas
 
 
@@ -13,16 +14,15 @@ def sample_sections(df, n):
     """
     Samples so there is same number of cross-sections in each bar
     """
-    bar = df.groupby('bar')
-    final_df = pandas.DataFrame()
-    for name, group in bar:
-        lens = len(group)
-        step = int(round(lens / n, 0))
-        if step < 1:
-            step = 1
-        group = group.iloc[::step]
-        final_df = final_df.append(group)
+    bars = df['bar'].unique()
+    if len(bars) <= n:
+        return df
 
+    sample_bars = np.random.choice(bars, n, replace=False)
+
+    final_df = pandas.DataFrame()
+    for bar in sample_bars:
+        final_df = final_df.append(df[df['bar']==bar])
     return final_df.reset_index(drop=True)
 
 
@@ -63,7 +63,11 @@ def get_normalized(bargroup, widthcol):
                 distances.append(1)
             else:
                 distances.append(row['distance'] / max_distance)
-            widths.append(row[widthcol] / median_width)
+            try:
+                widths.append(row[widthcol] / median_width)
+            except ZeroDivisionError:
+                widths.append(None)
+
         group['normalized_distance'] = distances
         group['normalized_width'] = widths
         df = df.append(group)
@@ -76,13 +80,15 @@ col_list = [
     'channel_width_dem',
     'channel_width_water',
     'channel_width_mean',
-    'bar_width'
+    'bar_width',
+    'bar_height',
 ]
 rename_list = {
     'channel_width_dem': 'channel_width_dem_std',
     'channel_width_water': 'channel_width_water_std',
     'channel_width_mean': 'channel_width_mean_std',
-    'bar_width': 'bar_width_std'
+    'bar_width': 'bar_width_std',
+    'bar_height': 'bar_height_std'
 }
 
 # Number of samples to take
@@ -95,6 +101,7 @@ red_df = pandas.read_csv(red)
 red_df = red_df[red_df['bar_width'] != 'False']
 red_df['bar_width'] = red_df['bar_width'].astype(float)
 red_df = red_df[red_df['bar_width'] > 0]
+red_df['bar_height'] = red_df['bar_height'].abs()
 red_df = get_downstream_distance(red_df.groupby('bar'))
 
 red_bar_mean = red_df.groupby('bar').mean()
@@ -105,7 +112,7 @@ red_bar_std = red_bar_std[col_list].rename(columns=rename_list)
 red_bars = red_bar_mean.merge(red_bar_std, on='bar')
 
 red_df_sample = sample_sections(red_df, n)
-red_df_bsample = sample_bars(red_bars, m)
+red_df_bsample = red_df_sample.groupby('bar').mean().reset_index(drop=False)
 
 # Trinity River
 trinity = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Trinity/bar_data.csv'
@@ -113,6 +120,7 @@ trinity_df = pandas.read_csv(trinity)
 trinity_df = trinity_df[trinity_df['bar_width'] != 'False']
 trinity_df['bar_width'] = trinity_df['bar_width'].astype(float)
 trinity_df = trinity_df[trinity_df['bar_width'] > 0]
+trinity_df['bar_height'] = trinity_df['bar_height'].abs()
 trinity_df = get_downstream_distance(trinity_df.groupby('bar'))
 
 trinity_bar_mean = trinity_df.groupby('bar').mean()
@@ -122,7 +130,7 @@ trinity_bar_std = trinity_bar_std[col_list].rename(columns=rename_list)
 trinity_bars = trinity_bar_mean.merge(trinity_bar_std, on='bar')
 
 trinity_df_sample = sample_sections(trinity_df, n)
-trinity_df_bsample = sample_bars(trinity_bars, m)
+trinity_df_bsample = trinity_df_sample.groupby('bar').mean().reset_index(drop=False)
 
 # Koyukuk River
 koyukuk = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Koyukuk/bar_data.csv'
@@ -130,6 +138,7 @@ koyukuk_df = pandas.read_csv(koyukuk)
 koyukuk_df = koyukuk_df[koyukuk_df['bar_width'] != 'False']
 koyukuk_df['bar_width'] = koyukuk_df['bar_width'].astype(float)
 koyukuk_df = koyukuk_df[koyukuk_df['bar_width'] > 0]
+koyukuk_df['bar_height'] = koyukuk_df['bar_height'].abs()
 koyukuk_df = get_downstream_distance(koyukuk_df.groupby('bar'))
 
 koyukuk_bar_mean = koyukuk_df.groupby('bar').mean()
@@ -139,27 +148,7 @@ koyukuk_bar_std = koyukuk_bar_std[col_list].rename(columns=rename_list)
 koyukuk_bars = koyukuk_bar_mean.merge(koyukuk_bar_std, on='bar')
 
 koyukuk_df_sample = sample_sections(koyukuk_df, n)
-koyukuk_df_bsample = sample_bars(koyukuk_bars, m)
-
-# Platte River
-platte = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Platte/bar_data.csv'
-platte_df = pandas.read_csv(platte)
-platte_df = platte_df[platte_df['bar_width'] > 0]
-platte_df_df = get_downstream_distance(platte_df.groupby('bar'))
-
-platte_bar_mean = platte_df.groupby('bar').mean()
-platte_bar_mean = platte_bar_mean[col_list]
-platte_bar_std = platte_df.groupby('bar').sem()
-platte_bar_std = platte_bar_std[col_list].rename(columns=rename_list)
-platte_bars = platte_bar_mean.merge(platte_bar_std, on='bar')
-
-platte_bars = platte_df.groupby('bar').mean()
-platte_df_sample = sample_sections(platte_df, n)
-platte_df_bsample = platte_bars
-
-platte_df['channel_width_water'] = platte_df['channel_width_dem']
-platte_bars['channel_width_water'] = platte_bars['channel_width_dem']
-platte_df_sample['channel_width_water'] = platte_df_sample['channel_width_dem']
+koyukuk_df_bsample = koyukuk_df_sample.groupby('bar').mean().reset_index(drop=False)
 
 # White River
 white = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/White_River/bar_data.csv'
@@ -168,13 +157,14 @@ white_df = white_df[white_df['bar_width'] != 'False']
 white_df['bar_width'] = white_df['bar_width'].astype(float)
 white_df['bar_height'] = white_df['bar_height'].astype(float)
 white_df = white_df[white_df['bar_width'] > 0]
+white_df['bar_height'] = white_df['bar_height'].abs()
 white_df = get_downstream_distance(white_df.groupby('bar'))
 
 # Convert white river to m
 to_change = [
-    'channel_width_dem',
-    'channel_width_water',
-    'bar_width',
+#     'channel_width_dem',
+#     'channel_width_water',
+#     'bar_width',
     'bar_height',
 ]
 for change in to_change:
@@ -190,11 +180,14 @@ white_bars = white_bar_mean.merge(white_bar_std, on='bar')
 white_df_sample = sample_sections(white_df, n)
 white_df_bsample = white_bars
 
+white_df_bsample = white_df_sample.groupby('bar').mean().reset_index(drop=False)
+
 # Powder River
 powder = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Powder/bar_data.csv'
 powder_df = pandas.read_csv(powder)
 powder_df['bar_width'] = powder_df['bar_width'].astype(float)
 powder_df = powder_df[powder_df['bar_width'] > 0]
+powder_df['bar_height'] = powder_df['bar_height'].abs()
 powder_df = get_downstream_distance(powder_df.groupby('bar'))
 
 powder_bar_mean = powder_df.groupby('bar').mean()
@@ -204,7 +197,7 @@ powder_bar_std = powder_bar_std[col_list].rename(columns=rename_list)
 powder_bars = powder_bar_mean.merge(powder_bar_std, on='bar')
 
 powder_df_sample = sample_sections(powder_df, n)
-powder_df_bsample = powder_bars
+powder_df_bsample = powder_df_sample.groupby('bar').mean().reset_index(drop=False)
 
 # Mississippi River
 mississippi = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Mississippi/bar_data.csv'
@@ -237,10 +230,10 @@ miss1_bar_std = miss1_bar_std[col_list].rename(columns=rename_list)
 miss1_bars = miss1_bar_mean.merge(miss1_bar_std, on='bar')
 
 miss1_df_sample = sample_sections(miss1_df, n)
-miss1_df_bsample = miss1_bars
+miss1_df_bsample = miss1_df_sample.groupby('bar').mean().reset_index(drop=False)
 
 # Brazos
-brazos = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Brazos/bar_data.csv'
+brazos = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Brazos_Near_Calvert/bar_data.csv'
 brazos_df = pandas.read_csv(brazos)
 brazos_df = brazos_df[brazos_df['bar_width'] != 'False']
 brazos_df['bar_width'] = brazos_df['bar_width'].astype(float)
@@ -254,7 +247,7 @@ brazos_bar_std = brazos_bar_std[col_list].rename(columns=rename_list)
 brazos_bars = brazos_bar_mean.merge(brazos_bar_std, on='bar')
 
 brazos_df_sample = sample_sections(brazos_df, n)
-brazos_df_bsample = brazos_bars
+brazos_df_bsample = brazos_df_sample.groupby('bar').mean().reset_index(drop=False)
 
 # Tombigbee
 tombigbee = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Tombigbee/bar_data.csv'
@@ -271,7 +264,7 @@ tom_bar_std = tom_bar_std[col_list].rename(columns=rename_list)
 tom_bars = tom_bar_mean.merge(tom_bar_std, on='bar')
 
 tom_df_sample = sample_sections(tom_df, n)
-tom_df_bsample = tom_bars
+tom_df_bsample = tom_df_sample.groupby('bar').mean().reset_index(drop=False)
 
 # Rio Grande TX
 rio = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Rio_Grande_TX/bar_data.csv'
@@ -288,7 +281,7 @@ rio_bar_std = rio_bar_std[col_list].rename(columns=rename_list)
 rio_bars = rio_bar_mean.merge(rio_bar_std, on='bar')
 
 rio_df_sample = sample_sections(rio_df, n)
-rio_df_bsample = sample_bars(rio_bars, m)
+rio_df_bsample = rio_df_sample.groupby('bar').mean().reset_index(drop=False)
 
 # Sacramento
 sac = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Sacramento/bar_data.csv'
@@ -305,7 +298,7 @@ sac_bar_std = sac_bar_std[col_list].rename(columns=rename_list)
 sac_bars = sac_bar_mean.merge(sac_bar_std, on='bar')
 
 sac_df_sample = sample_sections(sac_df, n)
-sac_df_bsample = sac_bars
+sac_df_bsample = sac_df_sample.groupby('bar').mean().reset_index(drop=False)
 
 # Nestucca
 bev = '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Beaver/bar_data.csv'
@@ -315,6 +308,16 @@ bev_df['bar_width'] = bev_df['bar_width'].astype(float)
 bev_df = bev_df[bev_df['bar_width'] > 0]
 bev_df = get_downstream_distance(bev_df.groupby('bar'))
 
+# Convert white river to m
+to_change = [
+    'channel_width_dem',
+    'channel_width_water',
+    'bar_width',
+    'bar_height',
+]
+for change in to_change:
+    bev_df[change] = bev_df[change] * 0.3048
+
 bev_bar_mean = bev_df.groupby('bar').mean()
 bev_bar_mean = bev_bar_mean[col_list]
 bev_bar_std = bev_df.groupby('bar').sem()
@@ -322,13 +325,12 @@ bev_bar_std = bev_bar_std[col_list].rename(columns=rename_list)
 bev_bars = bev_bar_mean.merge(bev_bar_std, on='bar')
 
 bev_df_sample = sample_sections(bev_df, n)
-bev_df_bsample = sample_bars(bev_bars, m)
+bev_df_bsample = bev_df_sample.groupby('bar').mean().reset_index(drop=False)
 
 # Bars DF
 red_bars['river'] = 'Red River'
 trinity_bars['river'] = 'Trinity River'
 koyukuk_bars['river'] = 'Koyukuk River'
-platte_bars['river'] = 'Platte River'
 white_bars['river'] = 'White River'
 powder_bars['river'] = 'Powder River'
 miss_bars['river'] = 'Mississippi River - Lecliar'
@@ -341,7 +343,6 @@ bev_bars['river'] = 'Nestucca River'
 
 bars_df = red_bars.append(trinity_bars)
 bars_df = bars_df.append(koyukuk_bars)
-bars_df = bars_df.append(platte_bars)
 bars_df = bars_df.append(white_bars)
 bars_df = bars_df.append(powder_bars)
 bars_df = bars_df.append(miss_bars)
@@ -356,7 +357,6 @@ bars_df = bars_df.append(bev_bars)
 red_df['river'] = 'Red River'
 trinity_df['river'] = 'Trinity River'
 koyukuk_df['river'] = 'Koyukuk River'
-platte_df['river'] = 'Platte River'
 white_df['river'] = 'White River'
 powder_df['river'] = 'Powder River'
 miss_df['river'] = 'Mississippi River - Leclair'
@@ -369,7 +369,6 @@ bev_df['river'] = 'Nestucca River'
 
 ms_df = red_df.append(trinity_df)
 ms_df = ms_df.append(koyukuk_df)
-ms_df = ms_df.append(platte_df)
 ms_df = ms_df.append(white_df)
 ms_df = ms_df.append(powder_df)
 ms_df = ms_df.append(miss_df)
@@ -384,7 +383,6 @@ ms_df = ms_df.append(bev_df)
 red_df_sample['river'] = 'Red River'
 trinity_df_sample['river'] = 'Trinity River'
 koyukuk_df_sample['river'] = 'Koyukuk River'
-platte_df_sample['river'] = 'Platte River'
 white_df_sample['river'] = 'White River'
 powder_df_sample['river'] = 'Powder River'
 miss_df_sample['river'] = 'Mississippi River - Leclair'
@@ -398,7 +396,6 @@ bev_df_sample['river'] = 'Nestucca River'
 red_df_bsample['river'] = 'Red River'
 trinity_df_bsample['river'] = 'Trinity River'
 koyukuk_df_bsample['river'] = 'Koyukuk River'
-platte_df_bsample['river'] = 'Platte River'
 white_df_bsample['river'] = 'White River'
 powder_df_bsample['river'] = 'Powder River'
 miss_df_bsample['river'] = 'Mississippi River - Leclair'
@@ -411,7 +408,6 @@ bev_df_bsample['river'] = 'Nestucca River'
 
 sample_df = red_df_sample.append(trinity_df_sample)
 sample_df = sample_df.append(koyukuk_df_sample)
-sample_df = sample_df.append(platte_df_sample)
 sample_df = sample_df.append(white_df_sample)
 sample_df = sample_df.append(powder_df_sample)
 sample_df = sample_df.append(miss_df_sample)
@@ -424,8 +420,6 @@ sample_df = sample_df.append(bev_df_sample)
 
 sample_bar_df = red_df_bsample.append(trinity_df_bsample)
 sample_bar_df = sample_bar_df.append(koyukuk_df_bsample)
-sample_bar_df = sample_bar_df.append(platte_df_bsample)
-sample_bar_df = sample_bar_df.append(white_df_bsample)
 sample_bar_df = sample_bar_df.append(white_df_bsample)
 sample_bar_df = sample_bar_df.append(powder_df_bsample)
 sample_bar_df = sample_bar_df.append(miss_df_bsample)
@@ -435,6 +429,12 @@ sample_bar_df = sample_bar_df.append(tom_df_bsample)
 sample_bar_df = sample_bar_df.append(rio_df_bsample)
 sample_bar_df = sample_bar_df.append(sac_df_bsample)
 sample_bar_df = sample_bar_df.append(bev_df_bsample)
+
+# Identify bars that are wider than the channel and remove
+ms_df = ms_df[ms_df['bar_width'] <= ms_df['channel_width_dem']]
+bars_df = bars_df[bars_df['bar_width'] <= bars_df['channel_width_dem']]
+sample_df = sample_df[sample_df['bar_width'] <= sample_df['channel_width_dem']]
+sample_bar_df = sample_bar_df[sample_bar_df['bar_width'] <= sample_bar_df['channel_width_dem']]
 
 # normalized
 ms_df = get_normalized(ms_df.groupby(['river', 'bar']), 'channel_width_water')

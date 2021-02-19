@@ -1,4 +1,5 @@
 import math
+import copy
 
 from matplotlib import pyplot as plt
 import numpy as np
@@ -6,6 +7,8 @@ import pandas
 from scipy.signal import argrelextrema
 from scipy import spatial
 from rivamap import georef
+from matplotlib.widgets import Button
+from matplotlib.patches import Rectangle
 
 from BarWidth import PointPicker
 
@@ -265,8 +268,10 @@ class RiverHandler():
             print('No Channel Found')
             return False, None, None
 
-    def mannual_find_channel_width(self, idx, section):
+    def mannual_find_channel_width(self, idx, section, bar, thresh=10):
+
         # Set the X and Y
+        section = section[section['value_smooth'] > thresh]
         p = section['distance']
         t = section['value_smooth']
 
@@ -274,16 +279,35 @@ class RiverHandler():
             return False, None, None
 
         # Pick positive bank
-        fig = plt.figure()
-        one = plt.scatter(p, t)
-        plt.title('{}: Pick positive Banks First'.format(idx))
+        fig, ax = plt.subplots(
+            nrows=1, 
+            ncols=1, 
+            figsize=(20,5),
+        )
+
+        # Bar
+        one = ax.scatter(p, t)
+        two = ax.plot(p, t)
+        plt.title('{}-{}: Pick positive Banks First'.format(bar, idx))
         PP = PointPicker.WidthPicker(plt.gca())
         fig.canvas.mpl_connect('pick_event', PP)
         one.set_picker(1)
+
+        axclear = plt.axes([0.0, 0.0, 0.1, 0.1])
+        bclear = Button(plt.gca(), 'Clear')
+        bclear.on_clicked(PP.clear)
+
+        axdone = plt.axes([0.2, 0.0, 0.1, 0.1])
+        bdone = Button(plt.gca(), 'skip')
+        bdone.on_clicked(PP.skip)
+
         plt.show()
 
         print(PP.mouseX)
         print(PP.mouseY)
+
+        if len(PP.mouseX) == 0:
+            return None, None
 
         banks = [x for x in PP.mouseX]
         banks = [(banks[0], banks[1])]
@@ -365,7 +389,7 @@ class RiverHandler():
 
         return width, (min_slope, max_slope)
 
-    def get_bank_positions(self, xsection, dem_points, water_points):
+    def get_bank_positions(self, xsection, dem_points):
         """
         Takes the points from the channel_widths and turns them into a
         dataframe to save all of the channel banks for output
@@ -385,10 +409,6 @@ class RiverHandler():
         dem0_closest = closest(xsection['distance'], dem_points[0])
         dem1_closest = closest(xsection['distance'], dem_points[1])
 
-        if water_points:
-            water0_closest = closest(xsection['distance'], water_points[0])
-            water1_closest = closest(xsection['distance'], water_points[1])
-
         # Get the data for one side
         dem_bank = xsection[
             xsection['distance'] == dem0_closest
@@ -400,25 +420,9 @@ class RiverHandler():
                 {
                     'dem_easting': None,
                     'dem_northing': None,
-                    'water_easting': None,
-                    'water_northing': None
                 }, index=[0])
 
-        if not water_points:
-            water_easting = None
-            water_northing = None
-        else:
-            water_bank0 = xsection[
-                xsection['distance'] == water0_closest
-            ]
-            water_easting = water_bank0['easting']
-            water_northing = water_bank0['northing']
-
-        water_loc = [water_easting, water_northing]
-        data0 = np.append(
-            dem_loc,
-            water_loc
-        )
+        data0 = np.array(dem_loc)
 
         # Get the data for the other side
         dem_bank = xsection[
@@ -426,28 +430,17 @@ class RiverHandler():
         ]
         dem_loc = [dem_bank['easting'], dem_bank['northing']]
 
-        if water_points:
-            water_bank1 = xsection[
-                xsection['distance'] == water1_closest
-            ]
-            water_easting = water_bank1['easting']
-            water_northing = water_bank1['northing']
-            water_loc = [water_easting, water_northing]
-
-        data1 = np.append(
-            dem_loc,
-            water_loc
-        )
-
-        data = np.vstack((data0, data1)).astype('float')
+        data1 = np.array(dem_loc)
+        data = np.empty((2,2))
+        data[0,:] = data0.reshape(1,-1)
+        data[1,:] = data1.reshape(1,-1)
+        data = data.astype('float')
 
         return pandas.DataFrame(
             data,
             columns=[
                 'dem_easting',
-                'dem_northing',
-                'water_easting',
-                'water_northing'
+                'dem_northing'
             ]
         )
 

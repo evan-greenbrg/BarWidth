@@ -235,8 +235,8 @@ class RasterHandler():
 
         types = [
             ('distance', 'f4'),
-            ('easting', 'U10'),
-            ('northing', 'U10'),
+            ('easting', 'f16'),
+            ('northing', 'f16'),
             ('col', 'i4'),
             ('row', 'i4'),
             ('value', 'f4'),

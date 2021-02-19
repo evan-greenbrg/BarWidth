@@ -1,4 +1,5 @@
 import itertools
+import math
 
 import gdal
 import osr
@@ -9,6 +10,102 @@ from scipy import spatial
 import numpy as np
 import matplotlib.pyplot as plt
 from pyproj import Proj
+from skimage import measure, draw, morphology, feature, graph
+
+
+def sortCenterline(centerline):
+    costs = np.where(centerline, 1, 1000)
+    graph.route_through_array(
+        centerline, 
+        [0, 0], 
+        [1, 1], 
+        fully_connected=False
+    )
+    path, cost = graph.route_through_array(
+        costs, 
+        start=(int(riv_endpoints[0][1]), int(riv_endpoints[0][0])),
+        end=(int(riv_endpoints[1][1]), int(riv_endpoints[1][0])),
+        fully_connected=True
+    )
+    path = np.array(path)
+
+def convert_bar_to_utm(myProj, bar_df):
+    """
+    Converts the coordinates in the bar .csv file from lat-lon to UTM
+
+    Inputs -
+    myProj: Proj string used to convert between projects
+    bar_df: pandas dataframe of the bar upstream and downstream
+        coordinates
+
+    Outputs -
+    bar_df: pandas dataframe of bar coords in lat-lon AND UTM
+    """
+    # Set up the column names and the dataframe
+    columns = [
+        'upstream_lat',
+        'upstream_lon',
+        'upstream_easting',
+        'upstream_northing',
+        'downstream_lat',
+        'downstream_lon',
+        'downstream_easting',
+        'downstream_northing'
+    ]
+    coord_transform = pandas.DataFrame(
+        columns=columns
+    )
+
+    # Iterate through Incoming bar df and convert
+    for idx, row in bar_df.iterrows():
+        us_east, us_north = myProj(
+            row['Longitude_us'],
+            row['Latitude_us']
+        )
+        ds_east, ds_north = myProj(
+            row['Longitude_ds'],
+            row['Latitude_ds']
+        )
+
+        # Set up append dataframe
+        df = pandas.DataFrame(
+            data=[[
+                row['Latitude_us'],
+                row['Longitude_us'],
+                us_east,
+                us_north,
+                row['Latitude_ds'],
+                row['Longitude_ds'],
+                ds_east,
+                ds_north
+            ]],
+            columns=columns
+        )
+        coord_transform = coord_transform.append(df)
+
+    return coord_transform.reset_index(drop=True)
+
+
+def get_bar_coordinates(centerline, bar):
+    # Set up nearest neighbor search
+    tree = spatial.KDTree(centerline[['x', 'y']])
+
+    # Find the upstream index
+    distance, upstream_n = tree.query(
+        [(bar['upstream_easting'], bar['upstream_northing'])],
+        1
+    )
+    # Find the downstream index
+    distance, downstream_n = tree.query(
+        [(bar['downstream_easting'], bar['downstream_northing'])],
+        1
+    )
+
+    ns = [upstream_n[0], downstream_n[0]]
+    print(ns)
+    
+    # Return the coordinates between
+    return centerline[min(ns):max(ns)]
 
 
 class ComputeCurvature:
@@ -96,75 +193,96 @@ def convertCoordinates(centerline, cols):
     return easts, norths
 
 
-def findCurvature(centerline, B):
+
+# Calculate distance
+# Get Curvature
+def addDistance(centerline):
+    # Add distance
+    distances = []
+    distance = 0
+    for idx, (x, y) in enumerate(zip(centerline['x'], centerline['y'])):
+        if idx == 0:
+            distances.append(0)
+            continue
+        distance += math.sqrt(
+            (x - centerline['x'].iloc[idx-1])**2 
+            + (y - centerline['y'].iloc[idx-1])**2
+        )
+        distances.append(distance)
+
+    return distances
+
+def getCurvature(centerline):
+
+    Rs = []
+    xtree = spatial.KDTree(centerline[['s', 'x']])
+    ytree = spatial.KDTree(centerline[['s', 'y']])
+
+    for idx, (s, x, y) in enumerate(zip(centerline['s'], centerline['x'], centerline['y'])):
+        d, n = xtree.query([s, x], 5)
+
+        ss = np.array(centerline['s'].iloc[n])
+        xs = np.array(centerline['x'].iloc[n])
+        ys = np.array(centerline['y'].iloc[n])
+
+        # Fit Poly x
+        np.warnings.filterwarnings('ignore')
+        xz = np.polyfit(ss, xs, deg=3)
+        px = np.poly1d(xz)
+        xz1 = np.polyder(px, m=1)
+        xz2 = np.polyder(px, m=2)
+
+        # Fit Poly y
+        yz = np.polyfit(ss, ys, deg=3)
+        py = np.poly1d(yz)
+        yz1 = np.polyder(py, m=1)
+        yz2 = np.polyder(py, m=2)
+
+        # Get derivatives
+        dxds = xz1(s)
+        d2xds2 = xz2(s)
+
+        dyds = yz1(s)
+        d2yds2 = yz2(s)
+
+        # Get Curvature
+        C = (
+            ((dxds * d2yds2) - (dyds * d2xds2))
+            / (((dxds**2) + (dyds**2))**(3/2))
+        )
+
+        Rs.append(np.abs(math.pi / C * 2))
+
+    return Rs
+
+
+def findCurvature(sections):
     # Initialize the curve_fit class
     comp_curv = ComputeCurvature()
 
-    # Initialize the search tree to find nearest points
-    tree = spatial.KDTree(centerline[['x', 'y']])
+    # Get x and y arrays
+    xs = np.array(sections['x'])
+    ys = np.array(sections['y'])
 
-    data = {
-        'Northing': [],
-        'Easting': [],
-        'Curvature': []
-    }
-    for idx, row in centerline.iterrows():
-        # Find the points within 1 channel width
-        distance, neighbors = tree.query(
-            [(row['x'], row['y'])],
-            50
-        )
-        n_i = neighbors[distance < B]
+    if len(xs) == 0:
+        return None
 
-        if len(n_i) < 2:
-            continue
-
-        # Get x and y arrays
-        x = centerline.iloc[n_i]['x']
-        y = centerline.iloc[n_i]['y']
-
-        # Get curvature
-        curvature = comp_curv.fit(x, y)
+    # Get curvature
+    curvature = comp_curv.fit(xs, ys)
         
-        # Append to data store
-        data['Northing'].append(row['y'])
-        data['Easting'].append(row['x'])
-        data['Curvature'].append(curvature)
+#     # Plot the result
+#     plt.plot(centerline['x'], centerline['y'])
+#     theta_fit = np.linspace(-np.pi, np.pi, 180)
+#     x_fit = comp_curv.xc + comp_curv.r*np.cos(theta_fit)
+#     y_fit = comp_curv.yc + comp_curv.r*np.sin(theta_fit)
+#     plt.plot(x_fit, y_fit, 'k--', label='fit', lw=2)
+#     plt.plot(xs, ys, 'ro', label='data', ms=8, mec='b', mew=1)
+#     plt.xlabel('x')
+#     plt.ylabel('y')
+#     plt.title('curvature = {:.3e}'.format(curvature))
+#     plt.show()
 
-    return pandas.DataFrame(data)
-        
-
-    i = round(n / 2) - 1
-
-    xs = list(window(centerline['x'], n))
-    ys = list(window(centerline['y'], n))
-    pairs = [z for z in zip(xs, ys)]
-    data = {
-        'Northing': [],
-        'Easting': [],
-        'Curvature': []
-    }
-    for pair in pairs:
-        x = np.array(pair[0])
-        y = np.array(pair[1])
-        curvature = comp_curv.fit(x, y)
-
-        data['Northing'].append(pair[1][i])
-        data['Easting'].append(pair[0][i])
-        data['Curvature'].append(curvature)
-
-        # Plot the result
-#        theta_fit = np.linspace(-np.pi, np.pi, 180)
-#        x_fit = comp_curv.xc + comp_curv.r*np.cos(theta_fit)
-#        y_fit = comp_curv.yc + comp_curv.r*np.sin(theta_fit)
-#        plt.plot(x_fit, y_fit, 'k--', label='fit', lw=2)
-#        plt.plot(x, y, 'ro', label='data', ms=8, mec='b', mew=1)
-#        plt.xlabel('x')
-#        plt.ylabel('y')
-#        plt.title('curvature = {:.3e}'.format(curvature))
-#        plt.show()
-
-    return pandas.DataFrame(data)
+    return curvature 
 
 
 def matchBar(river, df, bar_data_filt):
@@ -173,15 +291,18 @@ def matchBar(river, df, bar_data_filt):
 
     # Find curvature for each bar point
     curvatures = []
+    Rs = []
     for idx, row in bar_data_filt.iterrows():
         distance, neighbors = tree.query(
             [(row['easting'], row['northing'])],
             1
         )
         curvatures.append(df.iloc[neighbors[0]]['Curvature'])
+        Rs.append(df.iloc[neighbors[0]]['R'])
 
     # Set curvature in filtered datafrae
     bar_data_filt['curvature'] = curvatures
+    bar_data_filt['R'] = Rs 
 
     return bar_data_filt
 
@@ -211,69 +332,89 @@ rivers = list(bar_data['river'].unique())
 # Get all the sources
 sources = {
     'Brazos River': (
-        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Brazos/brazos_centerline_4326.csv',
-        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Brazos/brazos_26914_clip.tif',
-        ['lon_', 'lat_'],
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Brazos_Near_Calvert/brazos_centerline.csv',
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Brazos_Near_Calvert/BrazosCalvert_26914.tif',
+        ['lon', 'lat'],
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Brazos_Near_Calvert/brazos_bar_coords.csv'
     ),
     'Koyukuk River': (
-        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Koyukuk/koyukuk_centerlines.txt',
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Koyukuk/koyukuk_manual_centerline_4326.csv',
         '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Koyukuk/Koyukuk_dem.tif_3995.tif',
         ['POINT_X', 'POINT_Y'],
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Koyukuk/koyukuk_bar_coords.csv'
     ),
     'Mississippi River': (
-        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi/mississippi_centerline_lats.csv',
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi/mississippi_centerline_manual.csv',
         '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi/Mississippi_1_26915_meter.tif',
         ['y_lon', 'x_lat'],
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi/mississippi_bar_lats.csv'
     ),
     'Mississippi River - Leclair': (
-        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi_Leclair/miss_leclair_centerline_4326.csv',
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi_Leclair/miss_leclair_manual_centerline_4326.csv',
         '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi_Leclair/MississippiDEM_meter.tif',
         ['lon_', 'lat_'],
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi_Leclair/miss_leclair_bar_coords.csv'
     ),
     'Nestucca River': (
-        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Beaver_OR/beaver_centerline_4326.csv',
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Beaver_OR/nestucca_centerline_manual_4326.csv',
         '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Beaver_OR/beaver_26910_meter.tif',
         ['POINT_X', 'POINT_Y'],
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Beaver_OR/beaver_bar_coords.csv'
     ),
     'Powder River': (
-        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Powder_River/powder_centerline_dense_4326.csv',
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Powder_River/Powder_centerline_manual.csv',
         '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Powder_River/output_be_26913.tif',
         ['lon_', 'lat_'],
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Powder_River/powder_river_ar_bar_coords.csv'
     ),
     'Red River': (
         '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Red_River/red_river_ar_centerline.csv',
         '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Red_River/red_river_dem_meter.tif',
         ['POINT_X', 'POINT_Y'],
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Red_River/red_river_ar_bar_coords.csv'
     ),
     'Rio Grande River': (
         '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX/RioGrandeCenterlineLats.csv',
         '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX/RioGrandeTxDEM.tif',
         ['lon_', 'lat_'],
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Rio_Grande_TX/riogrande_TX_bar_coords.csv'
     ),
     'Sacramento River': (
-        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/savramento_centerline_4326.csv',
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/savramento_manual_centerline.csv',
         '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/sacramento_merged_26910.tif',
         ['lon_', 'lat_'],
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Sacramento/sacramento_bar_coords.csv'
     ),
     'Tombigbee River': (
-        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Tombigbee/tombigbee_centerline_4326.csv',
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Tombigbee/tombigbee_manual_centerline.csv',
         '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Tombigbee/tombigbee_26916_10m_clip.tif',
         ['lon_', 'lat_'],
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Tombigbee/tobigbee_bar_coords.csv'
     ),
     'Trinity River': (
         '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/Trinity_Centerline.txt',
         '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/Trinity_1m_be_clip.tif',
         ['POINT_X', 'POINT_Y'],
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/trinity_bar_coords.csv'
     ),
     'White River': (
-        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/White_river/white_river_centerline_4326.csv',
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/White_river/white_river_centerline_manual.csv',
         '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/White_river/WhiteRiverDEM_32616_meter.tif',
         ['lon_', 'lat_'],
+        '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/White_river/white_river_in_bar_coords.csv'
     )
 }
 
-new_bar_data = pandas.DataFrame()
+data = {
+    'river': [],
+    'bar': [],
+    'channel_width_mean': [],
+    'curvature_circle': [],
+    'curvature_fagherazzi': [],
+}
+
 for river, source in sources.items():
+    print(source)
 
     # Get stats for river
     bar_data_filt = bar_data[bar_data['river'] == river]
@@ -291,28 +432,34 @@ for river, source in sources.items():
         source[2]
     )
 
-    curvature_df = findCurvature(centerline, B) 
+    centerline['s'] = addDistance(centerline)
+    centerline['R1'] = getCurvature(centerline)
 
-    # Match each river bar to a curvature
-    bar_data_filt = matchBar(river, curvature_df, bar_data_filt)
-
-    # Remove Outliers
-    bar_data_filt = removeOutliers(bar_data_filt)
-
-    # Stack the data
-    new_bar_data = pandas.concat(
-        [new_bar_data, bar_data_filt], 
-        ignore_index=True
+    # Get Bar df
+    bar_df = pandas.read_csv(
+        source[3],
+        names=[
+            'Latitude_us',
+            'Longitude_us',
+            'Latitude_ds',
+            'Longitude_ds'
+        ],
+        header=1
     )
+    bar_df = convert_bar_to_utm(myProj, bar_df)
 
-#plt.scatter(new_bar_data['channel_width_mean'], new_bar_data['curvature'])
-#plt.yscale('log')
-#plt.show()
+    for idx, bar in bar_df.iterrows():
+        sections = get_bar_coordinates(
+            centerline,
+            bar
+        ).reset_index(drop=True)
 
-bar_data_group = new_bar_data.groupby(['river', 'bar']).median()
-bar_data_group = bar_data_group.reset_index(drop=False)
+        data['river'].append(river)
+        data['bar'].append(idx)
+        data['channel_width_mean'].append(B)
+        data['curvature_circle'].append(findCurvature(sections))
+        data['curvature_fagherazzi'].append(sections['R1'].median())
 
-bar_data_group.to_csv('curvature.csv')
-print(bar_data_group)
+df = pandas.DataFrame(data)
+df.to_csv('curvature.csv')
 
-# EXTRA
