@@ -12,6 +12,7 @@ import osr
 import numpy as np
 import pandas
 from pyproj import Proj
+from matplotlib import pyplot as plt
 
 from BarWidth import BarHandler 
 
@@ -19,7 +20,6 @@ from BarWidth import BarHandler
 MIN_RSQUARE = 0.05
 BAR_PARAM_FN = 'bar_parameters.csv'
 BAR_DATA_FN = 'bar_data.csv'
-RSQUARE_FN = 'rsquared_dataframe.csv'
 
 
 def main():
@@ -52,6 +52,8 @@ def main():
 
     # Get Proj String
     ds = gdal.Open(input_param['demPath'], 0)
+    dem = ds.ReadAsArray()
+
     ProjStr = "epsg:{0}".format(
         osr.SpatialReference(
             wkt=ds.GetProjection()
@@ -83,15 +85,10 @@ def main():
 
     # Make structure that contains the sections for each bar
     print('Making Bar section structure')
-    bar_sections = {}
-    for idx, bar in bar_df.iterrows():
-        sections = bh.get_bar_xsections(
-            coordinates,
-            xsections,
-            bar_df.iloc[idx]
-        )
-        print(len(sections))
-        bar_sections[str(idx)] = sections
+    bar_numbers = [number for number in coordinates['bar'].unique()]
+    bar_sections = {str(int(i)): [] for i in bar_numbers}
+    for section in xsections:
+        bar_sections[section['bar']].append(section)
 
     # Initialize the parameters
     parameters = {
@@ -116,27 +113,20 @@ def main():
         ('elevation', 'object'),
     ]
 
-    # Make the dataframe that will keep track of the R-Squared
-    rsquared_di = {
-        'bar': [],
-        'idx': [],
-        'rsquared': [],
-    }
-
     # Save for filtered/Saved stats
     filtered = 0
     saved = 0
     # Run through all of the bars and sections
     for bar, sections in bar_sections.items():
+        # get which sections have widths 
+        num_sections = len(sections)
+
         widths = np.array([], dtype=types)
+        # Set all non-width sections to not collect bar stats
+        # Collect bar stats for all width sections
         for idx, section in np.ndenumerate(sections):
-            if (
-                section['dem_width'] == 'nan'
-            ) or (
-                not section['bank']
-            ) or (
-                section['water_width'] == 'nan'
-            ):
+
+            if not section['bank']:
                 width = np.array(
                     tuple(
                         [
@@ -153,98 +143,52 @@ def main():
                     dtype=widths.dtype
                 )
                 filtered += 1
-            else:
-                # interpolate profile down
-                if input_param['interpolate']:
-                    section = bh.interpolate_down(
-                        input_param.get('depth'),
-                        section
-                    )
+                widths = np.append(widths, width)
 
-                # Find the minimum and shift the cross-section
-                section = bh.shift_cross_section_down(
-                    section,
+                continue
+
+            # interpolate profile down
+            if input_param['interpolate']:
+                section = bh.interpolate_down(
+                    input_param.get('depth'),
+                    section
                 )
 
-                if input_param['mannual']:
-                    # Find the sigmoid equation
-                    popt = bh.mannual_fit_bar(section)
+            if section == 0:
+                continue
 
-                    # Find the r-squared
-#                    rsquared = bh.get_r_squared(section, banks, popt)
-                    rsquared = 1
+            # Find the minimum and shift the cross-section
+            section = bh.shift_cross_section_down(
+                section
+            )
 
-                else:
-                    # Find the side of the channel with the bar
-                    banks = bh.find_bar_side(section['bank'])
+            # Find the sigmoid equation
+            popt = bh.mannual_fit_bar(section)
 
-                    # Flip cross-sections so they are facing the same way
-                    section, banks = bh.flip_bars(section, banks)
+            # Keep track of the parameters
+            parameters['bar'].append(bar)
+            parameters['idx'].append('{0}_{1}'.format(bar, idx[0]))
+            parameters['L'].append(popt[0])
+            parameters['X0'].append(popt[1])
+            parameters['k'].append(popt[2])
 
-                    # Find x for maximum slope and maximum slope value
-                    x0, dydx = bh.find_maximum_slope(
-                        section['elev_section'],
-                        banks
-                    )
-                    # Fit sigmoid parameters
-                    popt = bh.fit_sigmoid_parameters(
-                        section,
-                        banks,
-                        x0,
-                        dydx
-                    )
-
-                    # Get the R-Squared
-                    rsquared = bh.get_r_squared(section, banks, popt)
-
-                # Filter based on R-squared value
-                if (rsquared < MIN_RSQUARE):
-                    width = np.array(
-                        tuple(
-                            [
-                                section[0],
-                                section['dem_width'],
-                                section['water_width'],
-                                None,
-                                section['elev_section']['easting'],
-                                section['elev_section']['northing'],
-                                section['elev_section']['distance'],
-                                section['elev_section']['value_smooth']
-                            ]
-                        ),
-                        dtype=widths.dtype
-                    )
-                    filtered += 1
-                else:
-                    # Keep track of the rsquared values
-                    rsquared_di['bar'].append(bar)
-                    rsquared_di['idx'].append('{0}_{1}'.format(bar, idx[0]))
-                    rsquared_di['rsquared'].append(rsquared)
-
-                    # Keep track of the parameters
-                    parameters['bar'].append(bar)
-                    parameters['idx'].append('{0}_{1}'.format(bar, idx[0]))
-                    parameters['L'].append(popt[0])
-                    parameters['X0'].append(popt[1])
-                    parameters['k'].append(popt[2])
-
-                    # store the sigmoid parameters and the cross section
-                    width = np.array(
-                        tuple(
-                            [
-                                section[0],
-                                section['dem_width'],
-                                section['water_width'],
-                                popt,
-                                section['elev_section']['easting'],
-                                section['elev_section']['northing'],
-                                section['elev_section']['distance'],
-                                section['elev_section']['value_smooth']
-                            ]
-                        ),
-                        dtype=widths.dtype
-                    )
-                    saved += 1
+            # store the sigmoid parameters and the cross section
+            width = np.array(
+                tuple(
+                    [
+                        section[0],
+                        section['dem_width'],
+                        section['water_width'],
+                        popt,
+                        section['elev_section']['easting'],
+                        section['elev_section']['northing'],
+                        section['elev_section']['distance'],
+                        section['elev_section']['value_smooth']
+                    ]
+                ),
+                dtype=widths.dtype
+            )
+            saved += 1
 
             widths = np.append(widths, width)
 
@@ -313,7 +257,6 @@ def main():
     # Create dataframes from data dicts
     parameters_df = pandas.DataFrame(parameters)
     bar_data_df = pandas.DataFrame(bar_data)
-    rsquared_df = pandas.DataFrame(rsquared_di)
 
     # Save parameters data
     print('Saving bar parameters')
@@ -322,10 +265,6 @@ def main():
     # Save the bar data
     print('Saving Bar Data')
     bar_data_df.to_csv(input_param['outputRoot'] + BAR_DATA_FN)
-
-    # Save the r-squared data
-    print('Saving R-Squared')
-    rsquared_df.to_csv(input_param['outputRoot'] + RSQUARE_FN)
 
     print('Logging some stats:')
     print('Total Bars: {}'.format(len(bar_widths)))
@@ -336,3 +275,38 @@ def main():
 
 if __name__ == "__main__":
     main()
+# 
+# 
+# 
+# input_param = {
+#     'xPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Trinity/xsections.npy',
+#     'coordPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Trinity/coordinates.csv',
+#     'barPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/trinity_bar_coords.csv',
+#     'demPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Trinity/Trinity_1m_be_clip.tif',
+#     'outputRoot': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Trinity/',
+#     'depth': 9,
+#     'interpolate': True,
+#     'mannual': True,
+# }
+
+input_param = {
+    'xPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Mississippi/xsections.npy',
+    'coordPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Mississippi/coordinates.csv' ,
+    'barPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi_Leclair/miss_leclair_bar_coords.csv',
+    'demPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Mississippi_Leclair/MississippiDEM_meter.tif',
+    'outputRoot': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Mississippi/',
+    'depth': 26,
+    'interpolate': True,
+    'mannual': True
+}
+input_param = {
+    'xPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Brazos_Near_Calvert/xsections.npy',
+    'coordPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Brazos_Near_Calvert/coordinates.csv',
+    'barPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Brazos_Near_Calvert/brazos_bar_coords.csv',
+    'demPath': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Input_Data/Brazos_Near_Calvert/BrazosCalvert_26914.tif',
+    'outputRoot': '/home/greenberg/ExtraSpace/PhD/Projects/Bar-Width/Output_Data/Brazos_Near_Calvert/',
+    'depth': 11,
+    'interpolate': True,
+    'mannual': True,
+}
+

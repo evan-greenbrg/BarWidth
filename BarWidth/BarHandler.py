@@ -22,6 +22,27 @@ class BarHandler():
         self.slope_threshold = 1
         self.slope_smooth = 10
 
+    def get_bar_coordinates(self, coordinates, bar):
+        # Set up nearest neighbor search
+        tree = spatial.KDTree(coordinates[['easting', 'northing']])
+
+        # Find the upstream index
+        distance, upstream_n = tree.query(
+            [(bar['upstream_easting'], bar['upstream_northing'])],
+            1
+        )
+        # Find the downstream index
+        distance, downstream_n = tree.query(
+            [(bar['downstream_easting'], bar['downstream_northing'])],
+            1
+        )
+
+        ns = [upstream_n[0], downstream_n[0]]
+        print(ns)
+        
+        # Return the coordinates between
+        return coordinates[min(ns):max(ns)]
+
     def get_bar_xsections(self, coordinates, xsections, bar):
         tree = spatial.KDTree(coordinates[['easting', 'northing']])
         distance, upstream_n = tree.query(
@@ -288,7 +309,7 @@ class BarHandler():
 
         return bars
 
-    def get_bar_geometry(self, p, sigmoid, sens=.057):
+    def get_bar_geometry(self, p, sigmoid, sens=.01):
         """
         From the given sigmoid parameters finds the bar width.
         Uses X% of the asymptote cutoff value to find the width end points
@@ -297,6 +318,7 @@ class BarHandler():
         Inputs -
         p: Array of channel distances to fit the sigmoid to
         sigmoid: sigmoir parameters
+        sens: default .057
 
         Outputs -
         bar_width: width of the fit clinoform
@@ -451,7 +473,10 @@ class BarHandler():
         elev = np.copy(section['elev_section'])
 
         # Get banks
-        banks = np.copy(section['bank'])
+        banks = list(np.copy(section['bank']))
+
+        if not banks:
+            return 0
 
         print(banks)
         if isinstance(banks[0], np.ndarray): 
@@ -468,29 +493,65 @@ class BarHandler():
         ]
 
         # Get elevation of channel top
-        channel_top = float(max(elev['value_smooth'][tuple([banks_idx])]))
+        channel_top = float(min(elev['value_smooth'][tuple([banks_idx])]))
 
         # Need to handle if I've given garbage width for bad section
         if min(banks_idx) == max(banks_idx):
             return section
 
+        # Find slope point and the slope
+        x = elev['distance']
+        y = elev['value_smooth']
+        y[y == 0] = None
+
+        fig, ax = plt.subplots(1, 1)
+        scatter = ax.scatter(x, y, linewidth=3)
+        line, = ax.plot(x, y, linewidth=3)
+        IP = PointPicker.InterpolatePicker(ax, x, y)
+
+        fig.canvas.mpl_connect('button_press_event', IP)
+        line.set_picker(1)
+
+        axclear = plt.axes([0.81, 0.17, 0.1, 0.055])
+        iclear = Button(axclear, 'Clear')
+        iclear.on_clicked(IP.clear)
+
+        axnext = plt.axes([0.81, 0.1, 0.1, 0.055])
+        idone = Button(axnext, 'Done')
+        idone.on_clicked(IP.done)
+
+        ax.set_title('Pick Interpolation Points')
+
+        plt.show()
+
+        # Parse positions and slopes from plotting
+        try: 
+            minslope = IP.dydx0
+        except AttributeError:
+            return 0
+
+        try: 
+            maxslope = IP.dydx1
+        except AttributeError:
+            return 0
+        
+        mini = IP.mini
+        maxi = IP.maxi
+
         # Find all of the slopes within the channel
         channel = np.copy(elev[min(banks_idx):max(banks_idx)])
-        ydiffs = np.diff(channel['value_smooth'])
+        mini = np.where(channel['distance'] == x[mini])
+        maxi = np.where(channel['distance'] == x[maxi])
 
-        # Find max and minimum slope - with centered difference
-        maxi = np.where(ydiffs == max(ydiffs))[0][0]
-        if maxi < 10:
-            maxslope = ydiffs[maxi]
+        if (len(mini) == 0) or (len(maxi) == 0):
+                return 0
         else:
-            maxslope = np.mean(ydiffs[maxi-10:maxi+10])
-
-        # Find the minimum slope - with centered difference
-        mini = np.where(ydiffs == min(ydiffs))[0][0]
-        if mini < 10:
-            minslope = ydiffs[mini]
-        else:
-            minslope = np.mean(ydiffs[mini-10:mini+10])
+            try:
+                mini = mini[0][0]
+                maxi = maxi[0][0]
+            except IndexError:
+                print('Did not find picked index within channel')
+                return 0
 
         # Create a new interpreted elevations array
         interp_channel = np.copy(channel)
@@ -498,29 +559,40 @@ class BarHandler():
         # Decend each bank - Max
         interpolate = True
         interp_depth = 0
-        channel_bot = interp_channel['value_smooth'][maxi]
+        channel_bot = float(interp_channel['value_smooth'][maxi])
         i = maxi
         m = abs(interp_channel['distance'][1] - interp_channel['distance'][0])
-        data = {'i': [], 'bot': [], 'dist': []}
+        dist = interp_channel['distance'][i]
+        data = {
+            'bot': [interp_channel['value_smooth'][i]], 
+            'dist': [interp_channel['distance'][i]]
+        }
         # Need to handle if the depth is greater than the expected
         if channel_top - channel_bot > depth:
             interpolate = False
             max_df = pandas.DataFrame(data)
             pass
+
         else:
+            iter_num = 0
             while (
                 interp_depth < depth
                 and abs(i) < len(channel['value_smooth']) - 1
             ):
+                if iter_num > 1000:
+                    print('Interpolation Failed')
+                    return 0
                 interp_depth = channel_top - channel_bot
-                i -= 1
+                dist -= m
                 channel_bot = channel_bot - (m * maxslope)
+
                 if channel_top - channel_bot > depth:
                     channel_bot = channel_top - depth
 
-                data['i'].append(i)
-                data['dist'].append(interp_channel['distance'][i])
+                data['dist'].append(dist)
                 data['bot'].append(channel_bot)
+
+                iter_num += 1
 
             max_df = pandas.DataFrame(data)
 
@@ -528,26 +600,43 @@ class BarHandler():
         interp_depth = 0
         channel_bot = interp_channel['value_smooth'][mini]
         i = mini
-        data = {'i': [], 'bot': [], 'dist': []}
+        dist = interp_channel['distance'][i]
+        data = {
+            'bot': [interp_channel['value_smooth'][i]], 
+            'dist': [interp_channel['distance'][i]]
+        }
         # Handle if depth is greater than the expected
         if channel_top - channel_bot > depth:
             interpolate = False
             min_df = pandas.DataFrame(data)
             pass
+
         else:
+            iter_num = 0
             while (
                 interp_depth < depth
                 and abs(i) < len(interp_channel['value_smooth']) - 1
             ):
+                if iter_num > 1000:
+                    print('Interpolation Failed')
+                    return 0
+
                 interp_depth = channel_top - channel_bot
-                i += 1
+                dist += m
                 channel_bot = channel_bot + (m * minslope)
                 if channel_top - channel_bot > depth:
                     channel_bot = channel_top - depth
 
-                data['i'].append(i)
-                data['dist'].append(interp_channel['distance'][i])
+                # Have to handle an error here
+                try:
+                    data['dist'].append(dist)
+                except IndexError:
+                    print('Interpolation failed')
+                    return 0
+
                 data['bot'].append(channel_bot)
+
+                iter_num += 1
 
             min_df = pandas.DataFrame(data)
 
@@ -556,44 +645,56 @@ class BarHandler():
             max_df,
             min_df,
             how='inner',
-            left_on='i',
-            right_on='i'
+            left_on='dist',
+            right_on='dist'
         )
         # If they overlap, find their crossing point
         if len(df) > 0:
             min_distance = 9999
             for idx, row in df.iterrows():
                 distance = cdist(
-                    [row[['dist_x', 'bot_x']]],
-                    [row[['dist_y', 'bot_y']]]
+                    [row[['dist', 'bot_x']]],
+                    [row[['dist', 'bot_y']]]
                 )[0][0]
                 if distance < min_distance:
                     min_distance = distance
                     min_i = idx
             crossover = df.iloc[min_i]
 
-        # Crop the max and min interpolated dataframes
-            min_df = min_df[min_df['i'] <= crossover['i']]
-            max_df = max_df[max_df['i'] > crossover['i']]
+            # Filter crossover to the "shallowest point"
+            bots = [crossover['bot_x'], crossover['bot_y']]
+            dists = [crossover['dist'], crossover['dist']]
+            shallow_i = np.where(bots == np.max(bots))[0][0]
+            crossover = {
+                'bot': bots[shallow_i],
+                'dist': dists[shallow_i]
+            }
+
+            # Crop the max and min interpolated dataframes
+            min_df = min_df[min_df['dist'] <= crossover['dist']]
+            max_df = max_df[max_df['dist'] >= crossover['dist']]
+
+        # Handle if there was no bank crossover
+        else:
+            crossover = None
 
         if interpolate:
-            # find maximum slope and minimum slope channel bottoms
-            channel_bot_max = min(max_df['bot'])
-            interp_maxi = min(max_df['i'])
-
-            channel_bot_min = min(min_df['bot'])
-            interp_mini = max(min_df['i'])
-
             # Create dataframe for inserting values
             df = min_df.append(max_df).reset_index(drop=True)
-            for idx, row in df.iterrows():
-                interp_channel[int(row['i'])]['value_smooth'] = row['bot']
+            min_dist = df['dist'].min()
+            max_dist = df['dist'].max()
 
-            # Set the value between the two edges
-            interpi = [interp_mini, interp_maxi]
-            interp_channel['value_smooth'][min(interpi):max(interpi)] = min(
-                [channel_bot_max, channel_bot_min]
-            )
+            # Create search tree
+            tree = spatial.KDTree(df[['dist', 'bot']])
+
+            # Matching points between interpolated and section
+            for idx, row in enumerate(interp_channel):
+                if (row['distance'] > min_dist) & (row['distance'] < max_dist):
+                    dist, n = tree.query(
+                        [(row['distance'], row['value_smooth'])], 
+                        1
+                    )
+                    interp_channel[idx]['value_smooth'] = df['bot'][int(n)]
 
         # Insert channel values into the whole section
         for idx, point in enumerate(interp_channel['distance']):
@@ -609,10 +710,16 @@ class BarHandler():
         """
         Mannually picks the bar points
         """
-        x = section['elev_section']['distance']
-        y = section['elev_section']['value_smooth']
+        elev = section['elev_section']
+        x = elev['distance']
+        y = elev['value_smooth']
 
-        fig, ax = plt.subplots(1, 1)
+        fig, ax = plt.subplots(
+            nrows=1, 
+            ncols=1, 
+            figsize=(20,5),
+        )
+
         line, = ax.plot(x, y, linewidth=3)
         BC = PointPicker.BarPicker(ax, x, y)
 
@@ -630,6 +737,8 @@ class BarHandler():
         axskip = plt.axes([0.81, 0.03, 0.1, 0.055])
         bskip = Button(axskip, 'Skip')
         bskip.on_clicked(BC.skip)
+
+        plt.title('Pick Clinoform Points')
 
         plt.show()
 

@@ -34,6 +34,16 @@ class WidthPicker(object):
         self.mouseX = []
         self.mouseY = []
 
+    def clear(self, event):
+        self.annotation.set_visible(False)
+        self.mouseX = []
+        self.mouseY = []
+
+    def skip(self, event):
+        # All done picking points
+        plt.close('all')
+        print('Skipping')
+
     def __call__(self, event):
         self.event = event
         self.x, self.y = event.mouseevent.xdata, event.mouseevent.ydata
@@ -47,6 +57,134 @@ class WidthPicker(object):
 
         if len(self.mouseX) >= 2:
             plt.close('all')
+
+
+class InterpolatePicker(object):
+    text_template = 'x: %0.2f\ny: %0.2f'
+    x, y = 0.0, 0.0
+    xoffset, yoffset = -20, 20
+    text_template = 'x: %0.2f\ny: %0.2f'
+
+    def __init__(self, ax, xaxis, yaxis):
+        self.ax = ax
+        self.xaxis = xaxis
+        self.yaxis = yaxis
+        self.annotation = ax.annotate(
+            self.text_template,
+            xy=(self.x, self.y),
+            xytext=(self.xoffset, self.yoffset),
+            textcoords='offset points',
+            ha='right',
+            va='bottom',
+            bbox=dict(boxstyle='round,pad=0.5', fc='yellow', alpha=0.5),
+            arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0')
+        )
+        self.annotation.set_visible(False)
+        self.events = []
+        self.Xs0 = []
+        self.Ys0 = []
+        self.Xs1 = []
+        self.Ys1 = []
+        self.ps = []
+
+    def clear(self, event):
+        self.annotation.set_visible(False)
+        self.events = []
+        self.Xs = []
+        self.Ys = []
+        
+        # Remove picked points
+        for p in self.ps:
+            p.remove()
+
+        print('Cleared')
+
+    def done(self, event):
+        # All done picking points
+        plt.close('all')
+        print('Done')
+
+    def __call__(self, event):
+
+        if not event.dblclick:
+            return 0
+
+        self.event = event
+        self.x, self.y = event.xdata, event.ydata
+        self.events.append(self.x)
+        self.events = list(set(self.events))
+
+        if self.x is not None:
+            self.annotation.xy = self.x, self.y
+            self.annotation.set_text(self.text_template % (self.x, self.y))
+            self.annotation.set_visible(True)
+            event.canvas.draw()
+
+        # Handle which event it was
+        if len(self.events) == 1:
+            self.Xs0.append(self.x)
+            self.Ys0.append(self.y)
+
+            # Plot the picked points
+            self.ps.append(self.ax.scatter(self.x, self.y))
+            plt.draw()
+
+        elif len(self.events) == 2:
+            self.Xs0.append(self.x)
+            self.Ys0.append(self.y)
+            self.dydx0, (self.x0, self.y0) = self.getSlopePosition(
+                self.Xs0, 
+                self.Ys0
+            )
+
+            # Find the indices of the middle points
+            self.mini = self.getIndexes(self.x0, self.y0)
+
+            # Plot the picked points
+            self.ps.append(self.ax.scatter(self.x, self.y))
+            plt.draw()
+
+        elif len(self.events) == 3:
+            self.Xs1.append(self.x)
+            self.Ys1.append(self.y)
+
+            # Plot the picked points
+            self.ps.append(self.ax.scatter(self.x, self.y))
+            plt.draw()
+
+        elif len(self.events) == 4:
+            self.Xs1.append(self.x)
+            self.Ys1.append(self.y)
+            self.dydx1, (self.x1, self.y1) = self.getSlopePosition(
+                self.Xs1, 
+                self.Ys1
+            )
+
+            # Find the indices of the middle points
+            self.maxi = self.getIndexes(self.x1, self.y1)
+
+            # Plot the picked points
+            self.ps.append(self.ax.scatter(self.x, self.y))
+            plt.draw()
+
+    def getIndexes(self, x, y):
+        # Get the indiceses for chosen points from the plot
+        close_x = closest(self.xaxis, x)
+
+        # Get min and max index for handling
+        i = np.where(self.xaxis == close_x)[0]
+
+        return i 
+
+    def getSlopePosition(self, Xs, Ys):
+        # Get slope
+        run = Xs[1] - Xs[0]
+        rise = Ys[1] - Ys[0]
+        dydx = rise / run
+        x = np.mean(Xs)
+        y = np.mean(Ys)
+
+        return dydx, (x, y)
 
 
 class BarPicker(object):
@@ -98,7 +236,7 @@ class BarPicker(object):
     def draw_bar(self, event):
         # Get positions from plot call
         L = max(self.LsY) - min(self.LsY)
-        x0 = np.average(self.LsX)
+        x0 = self.x0X
 
         # Find the slope at x0
         close_x0 = closest(self.xaxis, x0)
@@ -155,6 +293,9 @@ class BarPicker(object):
         if len(self.events) == 2:
             self.LsX.append(self.x)
             self.LsY.append(self.y)
+        if len(self.events) == 3:
+            self.x0X = self.x
+            self.x0Y = self.y
             self.draw_bar(event)
 
 

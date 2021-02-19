@@ -259,15 +259,15 @@ class Visualizer():
                 label=name,
                 color=bar_colors[i]
             )
-            ax[0].errorbar(
-                group['bar_width'],
-                group['mean_width'],
-                yerr=(group['channel_width_mean_std']),
-                xerr=(group['bar_width_std']),
-                ecolor='gray',
-                linestyle='',
-                capthick=5
-            )
+#            ax[0].errorbar(
+#                group['bar_width'],
+#                group['mean_width'],
+#                yerr=(group['channel_width_mean_std']),
+#                xerr=(group['bar_width_std']),
+#                ecolor='gray',
+#                linestyle='',
+#                capthick=5
+#            )
 
             # Next river
             i += 1
@@ -299,17 +299,20 @@ class Visualizer():
                 label=row['River']
             )
             j += 1
-        # fig.legend()
+        fig.legend()
         # Ancient Values
         data = {
-            'bar_width': [124, 11.143, 40],
-            'channel_width': [301, 23.21, 63]
+            'bar_width': [124, 11.143, 40, 15, 363, 456],
+            'channel_width': [301, 23.21, 63, 28, 720, 753]
         }
         ancient_df = pandas.DataFrame(data)
         colors = [
             'green',
             'red',
-            'blue'
+            'blue',
+            'orange',
+            'yellow',
+            'teal'
         ]
         j = 0
         for idx, row in ancient_df.iterrows():
